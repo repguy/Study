@@ -9,10 +9,10 @@ import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
 const AI_MODELS = [
-  { value: "auto", label: "Auto (recommended)", desc: "System picks the best model" },
-  { value: "gemini", label: "Gemini 2.5 Flash", desc: "Google's fastest reasoning model" },
-  { value: "openrouter", label: "Llama 3.3 70B (Free)", desc: "Meta's open model via OpenRouter" },
-  { value: "custom", label: "Custom OpenRouter model", desc: "Use any model on OpenRouter" },
+  { value: "auto",       label: "Auto (recommended)",  desc: "Cluvi picks the best model for your pack" },
+  { value: "gemini",     label: "Cluvi Fast AI",       desc: "Fastest reasoning — best for most packs" },
+  { value: "openrouter", label: "Open Source Model",   desc: "Community model, great for general content" },
+  { value: "custom",     label: "Custom model",        desc: "Use any model slug from the AI gateway" },
 ];
 
 const fadeUp = {
@@ -163,7 +163,7 @@ export default function Settings() {
 
             {aiModel === "custom" && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-2 overflow-hidden">
-                <label className="text-sm text-muted-foreground">OpenRouter model slug</label>
+                <label className="text-sm text-muted-foreground">Model slug</label>
                 <Input
                   value={customModel}
                   onChange={(e) => setCustomModel(e.target.value)}
@@ -171,12 +171,6 @@ export default function Settings() {
                   className="bg-card/40 border-white/8"
                   data-testid="input-custom-model"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Browse models at{" "}
-                  <a href="https://openrouter.ai/models" target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">
-                    openrouter.ai/models
-                  </a>
-                </p>
               </motion.div>
             )}
 

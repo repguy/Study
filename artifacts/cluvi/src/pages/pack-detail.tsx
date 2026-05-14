@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout";
 import { useRoute, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Layers, Play, Share2, RefreshCw, CheckCircle2, Target, Brain, Zap } from "lucide-react";
+import { Loader2, Layers, Play, Share2, RefreshCw, CheckCircle2, Target, Brain, Zap, GraduationCap } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
@@ -98,12 +98,7 @@ export default function PackDetail() {
               {pack.isPro && (
                 <Badge className="bg-gradient-to-r from-primary to-accent text-white border-0 text-xs">PRO</Badge>
               )}
-              {pack.aiModelUsed && (
-                <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-white/5 border border-white/5">
-                  {pack.aiModelUsed}
-                </span>
-              )}
-            </div>
+              </div>
             <h1 className="text-3xl font-bold tracking-tight" data-testid="pack-title">{pack.title}</h1>
             {pack.summary && (
               <p className="text-muted-foreground mt-2 max-w-2xl leading-relaxed" data-testid="pack-summary">{pack.summary}</p>
@@ -143,6 +138,14 @@ export default function PackDetail() {
                 Take quiz
               </Button>
             </Link>
+            {pack.quizCount > 0 && (
+              <Link href={`/exam/${pack.id}`}>
+                <Button variant="outline" className="border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10" data-testid="button-exam">
+                  <GraduationCap className="w-4 h-4 mr-1.5" />
+                  Timed exam
+                </Button>
+              </Link>
+            )}
           </div>
         </motion.div>
 

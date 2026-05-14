@@ -15,6 +15,7 @@ import Upload from "./pages/upload";
 import PackDetail from "./pages/pack-detail";
 import Flashcards from "./pages/flashcards";
 import Quiz from "./pages/quiz";
+import ExamPrep from "./pages/exam-prep";
 import Tutor from "./pages/tutor";
 import Admin from "./pages/admin";
 import Rooms from "./pages/rooms";
@@ -129,6 +130,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/pack/:id"><ProtectedRoute component={PackDetail} /></Route>
             <Route path="/flashcards/:id"><ProtectedRoute component={Flashcards} /></Route>
             <Route path="/quiz/:id"><ProtectedRoute component={Quiz} /></Route>
+            <Route path="/exam/:id"><ProtectedRoute component={ExamPrep} /></Route>
             <Route path="/tutor"><ProtectedRoute component={Tutor} /></Route>
             <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
             <Route path="/upgrade"><ProtectedRoute component={Upgrade} /></Route>
