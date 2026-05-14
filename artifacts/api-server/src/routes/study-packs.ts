@@ -16,14 +16,65 @@ const PRO_MODEL = "gemini-2.5-flash";
 
 const CREDIT_COST = { summary: 1, flashcards: 5, quiz: 3, total: 9 };
 
-const GENERATION_PROMPT = (title: string, content: string) => `You are an expert study assistant. Analyze the following content and generate structured study material.
+const GENERATION_PROMPT = (title: string, contentOrUrl?: string) => `You are an expert study assistant. Analyze the following content and generate structured study material.
 
 Content Title: ${title}
-Content: ${content.slice(0, 8000)}
+${contentOrUrl ? `Content: ${contentOrUrl.slice(0, 8000)}` : ""}
 
 Return a JSON object with this exact structure:
 {
   "summary": "A concise 3-5 sentence summary of the main ideas",
+  "keyConcepts": ["concept1", "concept2", "concept3", "concept4", "concept5"],
+  "examPredictions": ["likely exam question 1", "likely exam question 2", "likely exam question 3", "likely exam question 4", "likely exam question 5"],
+  "flashcards": [
+    {"front": "Question or concept?", "back": "Answer or explanation"}
+  ],
+  "quizQuestions": [
+    {
+      "question": "Multiple choice question?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Why this is correct"
+    }
+  ]
+}
+
+Generate at least 10 flashcards and 5 quiz questions. Make them educational and test key concepts.
+Return ONLY valid JSON, no markdown or code blocks.`;
+
+const URL_GENERATION_PROMPT = (title: string, url: string) => `You are an expert study assistant. Visit the following URL and analyze its content to generate structured study material.
+
+URL: ${url}
+Content Title: ${title}
+
+Fetch and read the page at the URL above, then return a JSON object with this exact structure:
+{
+  "summary": "A concise 3-5 sentence summary of the main ideas from the page",
+  "keyConcepts": ["concept1", "concept2", "concept3", "concept4", "concept5"],
+  "examPredictions": ["likely exam question 1", "likely exam question 2", "likely exam question 3", "likely exam question 4", "likely exam question 5"],
+  "flashcards": [
+    {"front": "Question or concept?", "back": "Answer or explanation"}
+  ],
+  "quizQuestions": [
+    {
+      "question": "Multiple choice question?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Why this is correct"
+    }
+  ]
+}
+
+Generate at least 10 flashcards and 5 quiz questions. Make them educational and test key concepts.
+Return ONLY valid JSON, no markdown or code blocks.`;
+
+const IMAGE_GENERATION_PROMPT = (title: string) => `You are an expert study assistant. Analyze the image provided and generate structured study material based on everything you can see in it (diagrams, text, formulas, notes, charts, etc).
+
+Content Title: ${title}
+
+Return a JSON object with this exact structure:
+{
+  "summary": "A concise 3-5 sentence summary of what the image contains and the main ideas",
   "keyConcepts": ["concept1", "concept2", "concept3", "concept4", "concept5"],
   "examPredictions": ["likely exam question 1", "likely exam question 2", "likely exam question 3", "likely exam question 4", "likely exam question 5"],
   "flashcards": [
@@ -66,10 +117,40 @@ function extractJson(text: string): unknown {
   throw new Error(`Could not parse JSON from model response. Raw: ${cleaned.slice(0, 300)}`);
 }
 
-async function callGemini(title: string, content: string, model = PRO_MODEL): Promise<{ result: unknown; modelUsed: string }> {
+async function callGeminiText(title: string, content: string, model = PRO_MODEL): Promise<{ result: unknown; modelUsed: string }> {
   const response = await ai.models.generateContent({
     model,
     contents: [{ role: "user", parts: [{ text: GENERATION_PROMPT(title, content) }] }],
+    config: { maxOutputTokens: 8192 },
+  });
+  const text = response.text ?? "";
+  return { result: extractJson(text), modelUsed: model };
+}
+
+async function callGeminiUrl(title: string, url: string, model = PRO_MODEL): Promise<{ result: unknown; modelUsed: string }> {
+  // Use Gemini urlContext tool so the model fetches and reads the live page
+  const response = await ai.models.generateContent({
+    model,
+    contents: [{ role: "user", parts: [{ text: URL_GENERATION_PROMPT(title, url) }] }],
+    config: {
+      maxOutputTokens: 8192,
+      tools: [{ urlContext: {} }],
+    },
+  });
+  const text = response.text ?? "";
+  return { result: extractJson(text), modelUsed: model };
+}
+
+async function callGeminiImage(title: string, base64Data: string, mimeType: string, model = PRO_MODEL): Promise<{ result: unknown; modelUsed: string }> {
+  const response = await ai.models.generateContent({
+    model,
+    contents: [{
+      role: "user",
+      parts: [
+        { inlineData: { mimeType, data: base64Data } },
+        { text: IMAGE_GENERATION_PROMPT(title) },
+      ],
+    }],
     config: { maxOutputTokens: 8192 },
   });
   const text = response.text ?? "";
@@ -86,21 +167,50 @@ async function callOpenRouter(title: string, content: string, model: string): Pr
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function generateWithModel(content: string, title: string, user: { isPro: boolean; aiModel: string; customAiModel: string | null }): Promise<{ result: unknown; modelUsed: string }> {
+async function generateWithModel(
+  content: string,
+  title: string,
+  user: { isPro: boolean; aiModel: string; customAiModel: string | null },
+  sourceType: string,
+): Promise<{ result: unknown; modelUsed: string }> {
   const resolved = resolveModel(user);
 
   try {
-    if (resolved.type === "gemini") {
-      return await callGemini(title, content, resolved.model);
-    } else {
+    if (resolved.type === "openrouter") {
       return await callOpenRouter(title, content, resolved.model);
     }
+
+    // Gemini — route by source type
+    if (sourceType === "image") {
+      // Detect mime type from base64 header or default to jpeg
+      let mimeType = "image/jpeg";
+      if (content.startsWith("/9j/")) mimeType = "image/jpeg";
+      else if (content.startsWith("iVBOR")) mimeType = "image/png";
+      else if (content.startsWith("R0lGO")) mimeType = "image/gif";
+      else if (content.startsWith("UklGR")) mimeType = "image/webp";
+      return await callGeminiImage(title, content, mimeType, resolved.model);
+    }
+
+    if (sourceType === "url") {
+      return await callGeminiUrl(title, content, resolved.model);
+    }
+
+    // text / pdf / default
+    return await callGeminiText(title, content, resolved.model);
   } catch (primaryErr) {
     console.error(`[study-packs] primary model (${resolved.model}) failed:`, primaryErr);
-    // Fallback: if primary model failed, try the other Gemini model
     const fallbackModel = resolved.model === PRO_MODEL ? FREE_MODEL : PRO_MODEL;
     console.info(`[study-packs] falling back to ${fallbackModel}...`);
-    return await callGemini(title, content, fallbackModel);
+    // Retry with same source type logic but fallback model
+    if (sourceType === "image") {
+      let mimeType = "image/jpeg";
+      if (content.startsWith("iVBOR")) mimeType = "image/png";
+      return await callGeminiImage(title, content, mimeType, fallbackModel);
+    }
+    if (sourceType === "url") {
+      return await callGeminiUrl(title, content, fallbackModel);
+    }
+    return await callGeminiText(title, content, fallbackModel);
   }
 }
 
@@ -230,7 +340,7 @@ router.post("/study-packs", async (req, res) => {
   res.status(201).json(packWithCounts(pack, 0, 0));
 
   try {
-    const { result: generated, modelUsed } = await generateWithModel(content, parsed.data.title, user) as {
+    const { result: generated, modelUsed } = await generateWithModel(content, parsed.data.title, user, parsed.data.sourceType) as {
       result: {
         flashcards?: { front: string; back: string }[];
         quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
@@ -356,7 +466,7 @@ router.post("/study-packs/:id/generate", async (req, res) => {
     .where(eq(studyPacksTable.id, pack.id));
 
   try {
-    const { result: generated, modelUsed } = await generateWithModel(pack.sourceContent ?? pack.title, pack.title, user) as {
+    const { result: generated, modelUsed } = await generateWithModel(pack.sourceContent ?? pack.title, pack.title, user, pack.sourceType ?? "text") as {
       result: {
         flashcards?: { front: string; back: string }[];
         quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
