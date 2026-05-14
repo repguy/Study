@@ -1,21 +1,25 @@
 import { GoogleGenAI } from "@google/genai";
 
-if (!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL) {
+const proxyBaseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
+const proxyApiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+const directApiKey = process.env.GEMINI_API_KEY;
+
+if (!proxyBaseUrl && !directApiKey) {
   throw new Error(
-    "AI_INTEGRATIONS_GEMINI_BASE_URL must be set. Did you forget to provision the Gemini AI integration?",
+    "Gemini AI is not configured. Set either:\n" +
+    "  - AI_INTEGRATIONS_GEMINI_BASE_URL + AI_INTEGRATIONS_GEMINI_API_KEY (Replit AI integration)\n" +
+    "  - GEMINI_API_KEY (your own Google Gemini API key)",
   );
 }
 
-if (!process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
-  throw new Error(
-    "AI_INTEGRATIONS_GEMINI_API_KEY must be set. Did you forget to provision the Gemini AI integration?",
-  );
-}
-
-export const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
-});
+export const ai = proxyBaseUrl
+  ? new GoogleGenAI({
+      apiKey: proxyApiKey ?? "replit-managed",
+      httpOptions: {
+        apiVersion: "",
+        baseUrl: proxyBaseUrl,
+      },
+    })
+  : new GoogleGenAI({
+      apiKey: directApiKey!,
+    });
