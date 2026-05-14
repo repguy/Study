@@ -5,12 +5,15 @@ import { studyPacksTable, flashcardsTable, quizQuestionsTable, quizResultsTable,
 import { CreateStudyPackBody, GetStudyPackParams, DeleteStudyPackParams, GenerateStudyPackContentParams } from "@workspace/api-zod";
 import { eq, desc, and, avg } from "drizzle-orm";
 import { ai } from "@workspace/integrations-gemini-ai";
+import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { getOrCreateUser } from "./user";
 
 const router = Router();
 
-async function generateContent(content: string, title: string) {
-  const prompt = `You are an expert study assistant. Analyze the following content and generate structured study material.
+const FREE_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+const PRO_MODEL = "gemini-2.5-flash";
+
+const GENERATION_PROMPT = (title: string, content: string) => `You are an expert study assistant. Analyze the following content and generate structured study material.
 
 Content Title: ${title}
 Content: ${content.slice(0, 8000)}
@@ -37,15 +40,30 @@ Return a JSON object with this exact structure:
 Generate at least 10 flashcards and 5 quiz questions. Make them educational and test key concepts.
 Return ONLY valid JSON, no markdown or code blocks.`;
 
+async function generateContentFree(content: string, title: string): Promise<unknown> {
+  const completion = await openrouter.chat.completions.create({
+    model: FREE_MODEL,
+    max_tokens: 8192,
+    messages: [{ role: "user", content: GENERATION_PROMPT(title, content) }],
+  });
+  const text = completion.choices[0]?.message?.content ?? "";
+  const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  return JSON.parse(cleaned);
+}
+
+async function generateContentPro(content: string, title: string): Promise<unknown> {
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    model: PRO_MODEL,
+    contents: [{ role: "user", parts: [{ text: GENERATION_PROMPT(title, content) }] }],
     config: { maxOutputTokens: 8192 },
   });
-
   const text = response.text ?? "";
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   return JSON.parse(cleaned);
+}
+
+async function generateContent(content: string, title: string, isPro: boolean): Promise<unknown> {
+  return isPro ? generateContentPro(content, title) : generateContentFree(content, title);
 }
 
 router.get("/study-packs/dashboard", async (req, res) => {
@@ -166,17 +184,24 @@ router.post("/study-packs", async (req, res) => {
     flashcardCount: 0,
     quizCount: 0,
     examPredictionCount: 0,
+    aiModel: user.isPro ? "Gemini 2.5 Flash" : "Llama 3.3 70B (Free)",
   });
 
   try {
-    const generated = await generateContent(parsed.data.content, parsed.data.title);
+    const generated = await generateContent(parsed.data.content, parsed.data.title, user.isPro) as {
+      flashcards?: { front: string; back: string }[];
+      quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
+      summary?: string;
+      keyConcepts?: string[];
+      examPredictions?: string[];
+    };
 
     const flashcardData = (generated.flashcards ?? []).slice(0, user.isPro ? 100 : 5);
     const quizData = (generated.quizQuestions ?? []).slice(0, user.isPro ? 100 : 3);
 
     if (flashcardData.length > 0) {
       await db.insert(flashcardsTable).values(
-        flashcardData.map((f: { front: string; back: string }) => ({
+        flashcardData.map((f) => ({
           studyPackId: pack.id,
           front: f.front,
           back: f.back,
@@ -186,7 +211,7 @@ router.post("/study-packs", async (req, res) => {
 
     if (quizData.length > 0) {
       await db.insert(quizQuestionsTable).values(
-        quizData.map((q: { question: string; options: string[]; correctAnswer: number; explanation?: string }) => ({
+        quizData.map((q) => ({
           studyPackId: pack.id,
           question: q.question,
           options: JSON.stringify(q.options),
@@ -321,14 +346,20 @@ router.post("/study-packs/:id/generate", async (req, res) => {
     .where(eq(studyPacksTable.id, pack.id));
 
   try {
-    const generated = await generateContent(pack.sourceContent ?? pack.title, pack.title);
+    const generated = await generateContent(pack.sourceContent ?? pack.title, pack.title, user.isPro) as {
+      flashcards?: { front: string; back: string }[];
+      quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
+      summary?: string;
+      keyConcepts?: string[];
+      examPredictions?: string[];
+    };
 
     await db.delete(flashcardsTable).where(eq(flashcardsTable.studyPackId, pack.id));
     await db.delete(quizQuestionsTable).where(eq(quizQuestionsTable.studyPackId, pack.id));
 
-    if (generated.flashcards?.length > 0) {
+    if (generated.flashcards && generated.flashcards.length > 0) {
       await db.insert(flashcardsTable).values(
-        generated.flashcards.map((f: { front: string; back: string }) => ({
+        generated.flashcards.map((f) => ({
           studyPackId: pack.id,
           front: f.front,
           back: f.back,
@@ -336,9 +367,9 @@ router.post("/study-packs/:id/generate", async (req, res) => {
       );
     }
 
-    if (generated.quizQuestions?.length > 0) {
+    if (generated.quizQuestions && generated.quizQuestions.length > 0) {
       await db.insert(quizQuestionsTable).values(
-        generated.quizQuestions.map((q: { question: string; options: string[]; correctAnswer: number; explanation?: string }) => ({
+        generated.quizQuestions.map((q) => ({
           studyPackId: pack.id,
           question: q.question,
           options: JSON.stringify(q.options),

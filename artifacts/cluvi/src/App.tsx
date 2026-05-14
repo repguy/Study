@@ -16,6 +16,7 @@ import PackDetail from "./pages/pack-detail";
 import Flashcards from "./pages/flashcards";
 import Quiz from "./pages/quiz";
 import Tutor from "./pages/tutor";
+import Admin from "./pages/admin";
 
 const queryClient = new QueryClient();
 
@@ -129,6 +130,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/tutor"><ProtectedRoute component={Tutor} /></Route>
             <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
             <Route path="/upgrade"><ProtectedRoute component={Upgrade} /></Route>
+            <Route path="/admin"><ProtectedRoute component={Admin} /></Route>
             
             <Route component={NotFound} />
           </Switch>
