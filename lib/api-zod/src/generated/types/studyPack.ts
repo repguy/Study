@@ -16,6 +16,10 @@ export interface StudyPack {
   status: StudyPackStatus;
   /** @nullable */
   summary?: string | null;
+  /** @nullable */
+  shareToken?: string | null;
+  /** @nullable */
+  aiModelUsed?: string | null;
   flashcardCount: number;
   quizCount: number;
   examPredictionCount: number;

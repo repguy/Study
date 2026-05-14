@@ -10,6 +10,7 @@ export interface UserStats {
   xp: number;
   level: number;
   streak: number;
+  credits: number;
   /** 0-100 study strength score */
   studyStrength: number;
   /** 0-100 exam readiness score */

@@ -11,6 +11,6 @@ export interface StudyPackInput {
   /** @minLength 1 */
   title: string;
   sourceType: StudyPackInputSourceType;
-  /** Raw text content or base64-encoded file */
+  /** Raw text content, base64-encoded file, or URL */
   content: string;
 }

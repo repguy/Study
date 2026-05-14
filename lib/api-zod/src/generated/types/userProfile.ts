@@ -12,6 +12,10 @@ export interface UserProfile {
   /** @nullable */
   displayName?: string | null;
   isPro: boolean;
+  credits: number;
+  aiModel: string;
+  /** @nullable */
+  customAiModel?: string | null;
   xp: number;
   level: number;
   streak: number;

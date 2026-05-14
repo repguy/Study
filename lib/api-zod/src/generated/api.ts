@@ -23,6 +23,9 @@ export const GetUserProfileResponse = zod.object({
   clerkId: zod.string(),
   displayName: zod.string().nullish(),
   isPro: zod.boolean(),
+  credits: zod.number(),
+  aiModel: zod.string(),
+  customAiModel: zod.string().nullish(),
   xp: zod.number(),
   level: zod.number(),
   streak: zod.number(),
@@ -45,6 +48,9 @@ export const UpdateUserProfileResponse = zod.object({
   clerkId: zod.string(),
   displayName: zod.string().nullish(),
   isPro: zod.boolean(),
+  credits: zod.number(),
+  aiModel: zod.string(),
+  customAiModel: zod.string().nullish(),
   xp: zod.number(),
   level: zod.number(),
   streak: zod.number(),
@@ -62,6 +68,7 @@ export const GetUserStatsResponse = zod.object({
   xp: zod.number(),
   level: zod.number(),
   streak: zod.number(),
+  credits: zod.number(),
   studyStrength: zod.number().describe("0-100 study strength score"),
   examReadiness: zod.number().describe("0-100 exam readiness score"),
   totalPacks: zod.number(),
@@ -79,9 +86,11 @@ export const ListStudyPacksResponseItem = zod.object({
   id: zod.number(),
   userId: zod.number(),
   title: zod.string(),
-  sourceType: zod.enum(["text", "pdf", "image"]),
+  sourceType: zod.enum(["text", "pdf", "image", "url"]),
   status: zod.enum(["processing", "ready", "error"]),
   summary: zod.string().nullish(),
+  shareToken: zod.string().nullish(),
+  aiModelUsed: zod.string().nullish(),
   flashcardCount: zod.number(),
   quizCount: zod.number(),
   examPredictionCount: zod.number(),
@@ -98,8 +107,10 @@ export const ListStudyPacksResponse = zod.array(ListStudyPacksResponseItem);
 
 export const CreateStudyPackBody = zod.object({
   title: zod.string().min(1),
-  sourceType: zod.enum(["text", "pdf", "image"]),
-  content: zod.string().describe("Raw text content or base64-encoded file"),
+  sourceType: zod.enum(["text", "pdf", "image", "url"]),
+  content: zod
+    .string()
+    .describe("Raw text content, base64-encoded file, or URL"),
 });
 
 /**
@@ -112,9 +123,11 @@ export const GetDashboardSummaryResponse = zod.object({
       id: zod.number(),
       userId: zod.number(),
       title: zod.string(),
-      sourceType: zod.enum(["text", "pdf", "image"]),
+      sourceType: zod.enum(["text", "pdf", "image", "url"]),
       status: zod.enum(["processing", "ready", "error"]),
       summary: zod.string().nullish(),
+      shareToken: zod.string().nullish(),
+      aiModelUsed: zod.string().nullish(),
       flashcardCount: zod.number(),
       quizCount: zod.number(),
       examPredictionCount: zod.number(),
@@ -158,6 +171,8 @@ export const GetStudyPackResponse = zod.object({
   examPredictionCount: zod.number(),
   studyStrength: zod.number(),
   isPro: zod.boolean(),
+  shareToken: zod.string().nullish(),
+  aiModelUsed: zod.string().nullish(),
   flashcards: zod.array(
     zod.object({
       id: zod.number(),
@@ -213,6 +228,8 @@ export const GenerateStudyPackContentResponse = zod.object({
   examPredictionCount: zod.number(),
   studyStrength: zod.number(),
   isPro: zod.boolean(),
+  shareToken: zod.string().nullish(),
+  aiModelUsed: zod.string().nullish(),
   flashcards: zod.array(
     zod.object({
       id: zod.number(),

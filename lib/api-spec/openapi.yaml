@@ -470,6 +470,12 @@ components:
           type: ["string", "null"]
         isPro:
           type: boolean
+        credits:
+          type: integer
+        aiModel:
+          type: string
+        customAiModel:
+          type: ["string", "null"]
         xp:
           type: integer
         level:
@@ -492,6 +498,8 @@ components:
         - id
         - clerkId
         - isPro
+        - credits
+        - aiModel
         - xp
         - level
         - streak
@@ -515,6 +523,8 @@ components:
           type: integer
         streak:
           type: integer
+        credits:
+          type: integer
         studyStrength:
           type: integer
           description: 0-100 study strength score
@@ -537,6 +547,7 @@ components:
         - xp
         - level
         - streak
+        - credits
         - studyStrength
         - examReadiness
         - totalPacks
@@ -557,11 +568,15 @@ components:
           type: string
         sourceType:
           type: string
-          enum: [text, pdf, image]
+          enum: [text, pdf, image, url]
         status:
           type: string
           enum: [processing, ready, error]
         summary:
+          type: ["string", "null"]
+        shareToken:
+          type: ["string", "null"]
+        aiModelUsed:
           type: ["string", "null"]
         flashcardCount:
           type: integer
@@ -603,10 +618,10 @@ components:
           minLength: 1
         sourceType:
           type: string
-          enum: [text, pdf, image]
+          enum: [text, pdf, image, url]
         content:
           type: string
-          description: Raw text content or base64-encoded file
+          description: Raw text content, base64-encoded file, or URL
       required:
         - title
         - sourceType
@@ -647,6 +662,10 @@ components:
           type: integer
         isPro:
           type: boolean
+        shareToken:
+          type: ["string", "null"]
+        aiModelUsed:
+          type: ["string", "null"]
         flashcards:
           type: array
           items:

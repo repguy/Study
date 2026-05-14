@@ -53,6 +53,7 @@ export default function Quiz() {
     setQuizCompleted(true);
     
     submitQuiz.mutate({
+      id: packId,
       data: {
         answers,
         timeTakenSeconds: 600 - timeRemaining

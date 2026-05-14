@@ -13,4 +13,5 @@ export const StudyPackSourceType = {
   text: "text",
   pdf: "pdf",
   image: "image",
+  url: "url",
 } as const;

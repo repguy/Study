@@ -19,6 +19,10 @@ export interface UserProfile {
   /** @nullable */
   displayName?: string | null;
   isPro: boolean;
+  credits: number;
+  aiModel: string;
+  /** @nullable */
+  customAiModel?: string | null;
   xp: number;
   level: number;
   streak: number;
@@ -38,6 +42,7 @@ export interface UserStats {
   xp: number;
   level: number;
   streak: number;
+  credits: number;
   /** 0-100 study strength score */
   studyStrength: number;
   /** 0-100 exam readiness score */
@@ -57,6 +62,7 @@ export const StudyPackSourceType = {
   text: "text",
   pdf: "pdf",
   image: "image",
+  url: "url",
 } as const;
 
 export type StudyPackStatus =
@@ -76,6 +82,10 @@ export interface StudyPack {
   status: StudyPackStatus;
   /** @nullable */
   summary?: string | null;
+  /** @nullable */
+  shareToken?: string | null;
+  /** @nullable */
+  aiModelUsed?: string | null;
   flashcardCount: number;
   quizCount: number;
   examPredictionCount: number;
@@ -94,13 +104,14 @@ export const StudyPackInputSourceType = {
   text: "text",
   pdf: "pdf",
   image: "image",
+  url: "url",
 } as const;
 
 export interface StudyPackInput {
   /** @minLength 1 */
   title: string;
   sourceType: StudyPackInputSourceType;
-  /** Raw text content or base64-encoded file */
+  /** Raw text content, base64-encoded file, or URL */
   content: string;
 }
 
@@ -162,6 +173,10 @@ export interface StudyPackFull {
   examPredictionCount: number;
   studyStrength: number;
   isPro: boolean;
+  /** @nullable */
+  shareToken?: string | null;
+  /** @nullable */
+  aiModelUsed?: string | null;
   flashcards: Flashcard[];
   quizQuestions: QuizQuestion[];
   createdAt: string;

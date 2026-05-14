@@ -6,6 +6,7 @@ import flashcardsRouter from "./flashcards";
 import quizRouter from "./quiz";
 import geminiRouter from "./gemini";
 import adminRouter from "./admin";
+import webhooksRouter from "./webhooks";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(flashcardsRouter);
 router.use(quizRouter);
 router.use(geminiRouter);
 router.use(adminRouter);
+router.use(webhooksRouter);
 
 export default router;

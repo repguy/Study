@@ -25,6 +25,10 @@ export interface StudyPackFull {
   examPredictionCount: number;
   studyStrength: number;
   isPro: boolean;
+  /** @nullable */
+  shareToken?: string | null;
+  /** @nullable */
+  aiModelUsed?: string | null;
   flashcards: Flashcard[];
   quizQuestions: QuizQuestion[];
   createdAt: Date;
