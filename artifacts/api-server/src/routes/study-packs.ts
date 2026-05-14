@@ -11,7 +11,7 @@ import { randomUUID } from "crypto";
 
 const router = Router();
 
-const FREE_MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+const FREE_MODEL = "gemini-2.0-flash";
 const PRO_MODEL = "gemini-2.5-flash";
 
 const CREDIT_COST = { summary: 1, flashcards: 5, quiz: 3, total: 9 };
@@ -44,35 +44,63 @@ Return ONLY valid JSON, no markdown or code blocks.`;
 
 function resolveModel(user: { isPro: boolean; aiModel: string; customAiModel: string | null }) {
   const pref = user.aiModel ?? "auto";
-  if (pref === "gemini") return { type: "gemini" as const, model: PRO_MODEL };
-  if (pref === "openrouter") return { type: "openrouter" as const, model: FREE_MODEL };
+  if (pref === "openrouter" && user.customAiModel) return { type: "openrouter" as const, model: user.customAiModel };
   if (pref === "custom" && user.customAiModel) return { type: "openrouter" as const, model: user.customAiModel };
-  // auto: pro users get Gemini, free users get Llama
+  // auto or gemini: pro users get 2.5-flash, free users get 2.0-flash
   return user.isPro
     ? { type: "gemini" as const, model: PRO_MODEL }
-    : { type: "openrouter" as const, model: FREE_MODEL };
+    : { type: "gemini" as const, model: FREE_MODEL };
+}
+
+function extractJson(text: string): unknown {
+  // Strip markdown code fences
+  let cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  // Try direct parse first
+  try { return JSON.parse(cleaned); } catch { /* try harder */ }
+  // Find the first { ... } block
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch { /* fall through */ }
+  }
+  throw new Error(`Could not parse JSON from model response. Raw: ${cleaned.slice(0, 300)}`);
+}
+
+async function callGemini(title: string, content: string, model = PRO_MODEL): Promise<{ result: unknown; modelUsed: string }> {
+  const response = await ai.models.generateContent({
+    model,
+    contents: [{ role: "user", parts: [{ text: GENERATION_PROMPT(title, content) }] }],
+    config: { maxOutputTokens: 8192 },
+  });
+  const text = response.text ?? "";
+  return { result: extractJson(text), modelUsed: model };
+}
+
+async function callOpenRouter(title: string, content: string, model: string): Promise<{ result: unknown; modelUsed: string }> {
+  const completion = await openrouter.chat.completions.create({
+    model,
+    max_tokens: 8192,
+    messages: [{ role: "user", content: GENERATION_PROMPT(title, content) }],
+  });
+  const text = completion.choices[0]?.message?.content ?? "";
+  return { result: extractJson(text), modelUsed: model };
 }
 
 async function generateWithModel(content: string, title: string, user: { isPro: boolean; aiModel: string; customAiModel: string | null }): Promise<{ result: unknown; modelUsed: string }> {
   const resolved = resolveModel(user);
-  if (resolved.type === "gemini") {
-    const response = await ai.models.generateContent({
-      model: resolved.model,
-      contents: [{ role: "user", parts: [{ text: GENERATION_PROMPT(title, content) }] }],
-      config: { maxOutputTokens: 8192 },
-    });
-    const text = response.text ?? "";
-    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    return { result: JSON.parse(cleaned), modelUsed: resolved.model };
-  } else {
-    const completion = await openrouter.chat.completions.create({
-      model: resolved.model,
-      max_tokens: 8192,
-      messages: [{ role: "user", content: GENERATION_PROMPT(title, content) }],
-    });
-    const text = completion.choices[0]?.message?.content ?? "";
-    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    return { result: JSON.parse(cleaned), modelUsed: resolved.model };
+
+  try {
+    if (resolved.type === "gemini") {
+      return await callGemini(title, content, resolved.model);
+    } else {
+      return await callOpenRouter(title, content, resolved.model);
+    }
+  } catch (primaryErr) {
+    console.error(`[study-packs] primary model (${resolved.model}) failed:`, primaryErr);
+    // Fallback: if primary model failed, try the other Gemini model
+    const fallbackModel = resolved.model === PRO_MODEL ? FREE_MODEL : PRO_MODEL;
+    console.info(`[study-packs] falling back to ${fallbackModel}...`);
+    return await callGemini(title, content, fallbackModel);
   }
 }
 
@@ -243,7 +271,8 @@ router.post("/study-packs", async (req, res) => {
         updatedAt: new Date(),
       })
       .where(eq(studyPacksTable.id, pack.id));
-  } catch {
+  } catch (err) {
+    console.error("[study-packs] generation failed for pack", pack.id, err);
     await db
       .update(studyPacksTable)
       .set({ status: "error", updatedAt: new Date() })
