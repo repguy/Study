@@ -158,6 +158,9 @@ async function callGeminiImage(title: string, base64Data: string, mimeType: stri
 }
 
 async function callOpenRouter(title: string, content: string, model: string): Promise<{ result: unknown; modelUsed: string }> {
+  if (!openrouter) {
+    throw new Error("OpenRouter is not configured. Set AI_INTEGRATIONS_OPENROUTER_BASE_URL and AI_INTEGRATIONS_OPENROUTER_API_KEY.");
+  }
   const completion = await openrouter.chat.completions.create({
     model,
     max_tokens: 8192,
