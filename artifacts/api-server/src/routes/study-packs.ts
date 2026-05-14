@@ -248,10 +248,11 @@ router.post("/study-packs", async (req, res) => {
       .update(studyPacksTable)
       .set({ status: "error", updatedAt: new Date() })
       .where(eq(studyPacksTable.id, pack.id));
-    // refund credits on error
+    // refund credits on error (re-fetch current value to avoid stale state)
+    const freshUser = await db.query.usersTable.findFirst({ where: eq(usersTable.id, user.id) });
     await db
       .update(usersTable)
-      .set({ credits: user.credits, updatedAt: new Date() })
+      .set({ credits: (freshUser?.credits ?? 0) + CREDIT_COST.total, updatedAt: new Date() })
       .where(eq(usersTable.id, user.id));
   }
 });

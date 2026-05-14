@@ -18,13 +18,22 @@ export default function PackDetail() {
   const { toast } = useToast();
 
   const { data: pack, isLoading, refetch } = useGetStudyPack(id, {
-    query: { enabled: !!id, queryKey: getGetStudyPackQueryKey(id) }
+    query: {
+      enabled: !!id,
+      queryKey: getGetStudyPackQueryKey(id),
+      refetchInterval: (query) => {
+        const status = (query.state.data as { status?: string } | undefined)?.status;
+        return status === "processing" ? 2500 : false;
+      },
+    },
   });
   const generateContent = useGenerateStudyPackContent();
 
+  const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+
   const handleShare = async () => {
     try {
-      const res = await fetch(`/api/study-packs/${id}/share`, {
+      const res = await fetch(`${BASE}/api/study-packs/${id}/share`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -161,7 +170,24 @@ export default function PackDetail() {
             <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
               <Brain className="w-10 h-10 text-primary" />
             </motion.div>
-            <p className="text-muted-foreground">AI is generating your study material...</p>
+            <p className="text-muted-foreground">AI is generating your study material…</p>
+            <p className="text-xs text-muted-foreground/60">This usually takes 10–30 seconds</p>
+          </motion.div>
+        )}
+
+        {pack.status === "error" && (
+          <motion.div variants={fadeUp} custom={2} initial="hidden" animate="visible" className="flex flex-col items-center py-16 gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+              <Brain className="w-8 h-8 text-destructive" />
+            </div>
+            <div className="text-center">
+              <p className="font-semibold">Generation failed</p>
+              <p className="text-sm text-muted-foreground mt-1">The AI couldn't process your content. Your credits have been refunded.</p>
+            </div>
+            <Button onClick={handleRegenerate} disabled={generateContent.isPending} className="bg-gradient-to-r from-primary to-accent text-white border-0">
+              <RefreshCw className={`w-4 h-4 mr-2 ${generateContent.isPending ? "animate-spin" : ""}`} />
+              Try again
+            </Button>
           </motion.div>
         )}
 
