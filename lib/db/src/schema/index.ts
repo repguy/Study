@@ -5,3 +5,5 @@ export * from "./quiz-questions";
 export * from "./quiz-results";
 export * from "./conversations";
 export * from "./messages";
+export * from "./credit-packs";
+export * from "./study-rooms";

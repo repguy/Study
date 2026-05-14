@@ -7,6 +7,7 @@ import quizRouter from "./quiz";
 import geminiRouter from "./gemini";
 import adminRouter from "./admin";
 import webhooksRouter from "./webhooks";
+import roomsRouter from "./rooms";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(quizRouter);
 router.use(geminiRouter);
 router.use(adminRouter);
 router.use(webhooksRouter);
+router.use(roomsRouter);
 
 export default router;

@@ -17,6 +17,8 @@ import Flashcards from "./pages/flashcards";
 import Quiz from "./pages/quiz";
 import Tutor from "./pages/tutor";
 import Admin from "./pages/admin";
+import Rooms from "./pages/rooms";
+import Profile from "./pages/profile";
 
 const queryClient = new QueryClient();
 
@@ -131,6 +133,8 @@ function ClerkProviderWithRoutes() {
             <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
             <Route path="/upgrade"><ProtectedRoute component={Upgrade} /></Route>
             <Route path="/admin"><ProtectedRoute component={Admin} /></Route>
+            <Route path="/rooms"><ProtectedRoute component={Rooms} /></Route>
+            <Route path="/profile"><ProtectedRoute component={Profile} /></Route>
             
             <Route component={NotFound} />
           </Switch>

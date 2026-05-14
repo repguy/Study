@@ -10,6 +10,8 @@ import {
   Zap,
   Menu,
   AlertTriangle,
+  Users,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -24,10 +26,12 @@ interface LayoutProps {
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/upload", label: "New Pack", icon: PlusCircle },
+  { href: "/rooms", label: "Study Rooms", icon: Users },
   { href: "/tutor", label: "AI Tutor", icon: MessageSquare },
 ];
 
 const BOTTOM_LINKS = [
+  { href: "/profile", label: "Profile", icon: User },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
