@@ -20,6 +20,7 @@ import Tutor from "./pages/tutor";
 import Admin from "./pages/admin";
 import Rooms from "./pages/rooms";
 import Profile from "./pages/profile";
+import SharedPack from "./pages/shared-pack";
 
 const queryClient = new QueryClient();
 
@@ -137,7 +138,9 @@ function ClerkProviderWithRoutes() {
             <Route path="/admin"><ProtectedRoute component={Admin} /></Route>
             <Route path="/rooms"><ProtectedRoute component={Rooms} /></Route>
             <Route path="/profile"><ProtectedRoute component={Profile} /></Route>
-            
+
+            <Route path="/shared/:token" component={SharedPack} />
+
             <Route component={NotFound} />
           </Switch>
           <Toaster />
