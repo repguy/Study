@@ -1,8 +1,9 @@
 import { useGetDashboardSummary, useGetUserProfile, getGetDashboardSummaryQueryKey, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { motion } from "framer-motion";
-import { Flame, Brain, BookOpen, PlusCircle, Zap, Loader2, Target, AlertTriangle } from "lucide-react";
+import { Flame, Brain, BookOpen, PlusCircle, Zap, Target, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import { AppLayout } from "@/components/layout";
 
@@ -58,8 +59,30 @@ export default function Dashboard() {
   if (summaryLoading) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center h-full min-h-[60vh]">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        <div className="p-6 md:p-10 max-w-6xl mx-auto space-y-8">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-9 w-36" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+            <Skeleton className="h-10 w-28 rounded-xl" />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+          </div>
+          <Skeleton className="h-20 rounded-2xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-4">
+              <Skeleton className="h-6 w-32" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
+              </div>
+            </div>
+            <div className="space-y-4">
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-48 rounded-2xl" />
+            </div>
+          </div>
         </div>
       </AppLayout>
     );

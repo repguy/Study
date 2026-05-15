@@ -4,10 +4,17 @@ import { db } from "@workspace/db";
 import { studyPacksTable, flashcardsTable, quizQuestionsTable, quizResultsTable, usersTable } from "@workspace/db";
 import { CreateStudyPackBody, GetStudyPackParams, DeleteStudyPackParams, GenerateStudyPackContentParams } from "@workspace/api-zod";
 import { eq, desc, and } from "drizzle-orm";
-import { ai } from "@workspace/integrations-gemini-ai";
+import { ai, createGeminiClient, type GoogleGenAI } from "@workspace/integrations-gemini-ai";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { getOrCreateUser } from "./user";
+import { decrypt } from "../lib/encryption";
 import { randomUUID } from "crypto";
+
+function resolveByokGeminiClient(user: { byokGeminiKey?: string | null }): GoogleGenAI | null {
+  if (!user.byokGeminiKey) return null;
+  try { return createGeminiClient(decrypt(user.byokGeminiKey)); }
+  catch { return null; }
+}
 
 const router = Router();
 
@@ -117,8 +124,8 @@ function extractJson(text: string): unknown {
   throw new Error(`Could not parse JSON from model response. Raw: ${cleaned.slice(0, 300)}`);
 }
 
-async function callGeminiText(title: string, content: string, model = PRO_MODEL): Promise<{ result: unknown; modelUsed: string }> {
-  const response = await ai.models.generateContent({
+async function callGeminiText(title: string, content: string, model = PRO_MODEL, client: GoogleGenAI = ai): Promise<{ result: unknown; modelUsed: string }> {
+  const response = await client.models.generateContent({
     model,
     contents: [{ role: "user", parts: [{ text: GENERATION_PROMPT(title, content) }] }],
     config: { maxOutputTokens: 8192 },
@@ -127,9 +134,9 @@ async function callGeminiText(title: string, content: string, model = PRO_MODEL)
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function callGeminiUrl(title: string, url: string, model = PRO_MODEL): Promise<{ result: unknown; modelUsed: string }> {
+async function callGeminiUrl(title: string, url: string, model = PRO_MODEL, client: GoogleGenAI = ai): Promise<{ result: unknown; modelUsed: string }> {
   // Use Gemini urlContext tool so the model fetches and reads the live page
-  const response = await ai.models.generateContent({
+  const response = await client.models.generateContent({
     model,
     contents: [{ role: "user", parts: [{ text: URL_GENERATION_PROMPT(title, url) }] }],
     config: {
@@ -141,8 +148,8 @@ async function callGeminiUrl(title: string, url: string, model = PRO_MODEL): Pro
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function callGeminiImage(title: string, base64Data: string, mimeType: string, model = PRO_MODEL): Promise<{ result: unknown; modelUsed: string }> {
-  const response = await ai.models.generateContent({
+async function callGeminiImage(title: string, base64Data: string, mimeType: string, model = PRO_MODEL, client: GoogleGenAI = ai): Promise<{ result: unknown; modelUsed: string }> {
+  const response = await client.models.generateContent({
     model,
     contents: [{
       role: "user",
@@ -175,8 +182,10 @@ async function generateWithModel(
   title: string,
   user: { isPro: boolean; aiModel: string; customAiModel: string | null },
   sourceType: string,
+  byokClient?: GoogleGenAI | null,
 ): Promise<{ result: unknown; modelUsed: string }> {
   const resolved = resolveModel(user);
+  const geminiClient = byokClient ?? ai;
 
   try {
     if (resolved.type === "openrouter") {
@@ -191,15 +200,15 @@ async function generateWithModel(
       else if (content.startsWith("iVBOR")) mimeType = "image/png";
       else if (content.startsWith("R0lGO")) mimeType = "image/gif";
       else if (content.startsWith("UklGR")) mimeType = "image/webp";
-      return await callGeminiImage(title, content, mimeType, resolved.model);
+      return await callGeminiImage(title, content, mimeType, resolved.model, geminiClient);
     }
 
     if (sourceType === "url") {
-      return await callGeminiUrl(title, content, resolved.model);
+      return await callGeminiUrl(title, content, resolved.model, geminiClient);
     }
 
     // text / pdf / default
-    return await callGeminiText(title, content, resolved.model);
+    return await callGeminiText(title, content, resolved.model, geminiClient);
   } catch (primaryErr) {
     console.error(`[study-packs] primary model (${resolved.model}) failed:`, primaryErr);
     const fallbackModel = resolved.model === PRO_MODEL ? FREE_MODEL : PRO_MODEL;
@@ -208,12 +217,12 @@ async function generateWithModel(
     if (sourceType === "image") {
       let mimeType = "image/jpeg";
       if (content.startsWith("iVBOR")) mimeType = "image/png";
-      return await callGeminiImage(title, content, mimeType, fallbackModel);
+      return await callGeminiImage(title, content, mimeType, fallbackModel, geminiClient);
     }
     if (sourceType === "url") {
-      return await callGeminiUrl(title, content, fallbackModel);
+      return await callGeminiUrl(title, content, fallbackModel, geminiClient);
     }
-    return await callGeminiText(title, content, fallbackModel);
+    return await callGeminiText(title, content, fallbackModel, geminiClient);
   }
 }
 
@@ -308,16 +317,18 @@ router.post("/study-packs", async (req, res) => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const user = await getOrCreateUser(clerkId);
 
-  if (user.credits < CREDIT_COST.total) {
+  const byokClient = resolveByokGeminiClient(user);
+  if (!byokClient && user.credits < CREDIT_COST.total) {
     res.status(402).json({ error: `Not enough credits. Need ${CREDIT_COST.total}, have ${user.credits}.` });
     return;
   }
-
-  // Deduct credits upfront
-  await db
-    .update(usersTable)
-    .set({ credits: user.credits - CREDIT_COST.total, updatedAt: new Date() })
-    .where(eq(usersTable.id, user.id));
+  if (!byokClient) {
+    // Deduct credits upfront
+    await db
+      .update(usersTable)
+      .set({ credits: user.credits - CREDIT_COST.total, updatedAt: new Date() })
+      .where(eq(usersTable.id, user.id));
+  }
 
   let content = parsed.data.content;
   if (parsed.data.sourceType === "url") {
@@ -343,7 +354,7 @@ router.post("/study-packs", async (req, res) => {
   res.status(201).json(packWithCounts(pack, 0, 0));
 
   try {
-    const { result: generated, modelUsed } = await generateWithModel(content, parsed.data.title, user, parsed.data.sourceType) as {
+    const { result: generated, modelUsed } = await generateWithModel(content, parsed.data.title, user, parsed.data.sourceType, byokClient) as {
       result: {
         flashcards?: { front: string; back: string }[];
         quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
@@ -390,12 +401,14 @@ router.post("/study-packs", async (req, res) => {
       .update(studyPacksTable)
       .set({ status: "error", updatedAt: new Date() })
       .where(eq(studyPacksTable.id, pack.id));
-    // refund credits on error (re-fetch current value to avoid stale state)
-    const freshUser = await db.query.usersTable.findFirst({ where: eq(usersTable.id, user.id) });
-    await db
-      .update(usersTable)
-      .set({ credits: (freshUser?.credits ?? 0) + CREDIT_COST.total, updatedAt: new Date() })
-      .where(eq(usersTable.id, user.id));
+    if (!byokClient) {
+      // refund credits on error (re-fetch current value to avoid stale state)
+      const freshUser = await db.query.usersTable.findFirst({ where: eq(usersTable.id, user.id) });
+      await db
+        .update(usersTable)
+        .set({ credits: (freshUser?.credits ?? 0) + CREDIT_COST.total, updatedAt: new Date() })
+        .where(eq(usersTable.id, user.id));
+    }
   }
 });
 
@@ -454,14 +467,17 @@ router.post("/study-packs/:id/generate", async (req, res) => {
   });
   if (!pack) { res.status(404).json({ error: "Not found" }); return; }
 
-  if (user.credits < CREDIT_COST.total) {
+  const byokClient2 = resolveByokGeminiClient(user);
+  if (!byokClient2 && user.credits < CREDIT_COST.total) {
     res.status(402).json({ error: `Not enough credits. Need ${CREDIT_COST.total}, have ${user.credits}.` });
     return;
   }
-  await db
-    .update(usersTable)
-    .set({ credits: user.credits - CREDIT_COST.total, updatedAt: new Date() })
-    .where(eq(usersTable.id, user.id));
+  if (!byokClient2) {
+    await db
+      .update(usersTable)
+      .set({ credits: user.credits - CREDIT_COST.total, updatedAt: new Date() })
+      .where(eq(usersTable.id, user.id));
+  }
 
   await db
     .update(studyPacksTable)
@@ -469,7 +485,7 @@ router.post("/study-packs/:id/generate", async (req, res) => {
     .where(eq(studyPacksTable.id, pack.id));
 
   try {
-    const { result: generated, modelUsed } = await generateWithModel(pack.sourceContent ?? pack.title, pack.title, user, pack.sourceType ?? "text") as {
+    const { result: generated, modelUsed } = await generateWithModel(pack.sourceContent ?? pack.title, pack.title, user, pack.sourceType ?? "text", byokClient2) as {
       result: {
         flashcards?: { front: string; back: string }[];
         quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];

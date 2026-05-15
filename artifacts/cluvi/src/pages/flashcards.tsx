@@ -177,7 +177,7 @@ export default function Flashcards() {
                 className="flex flex-col items-center gap-3 w-full max-w-xl"
               >
                 <p className="text-sm text-muted-foreground font-medium">How well did you know this?</p>
-                <div className="flex gap-2 md:gap-3 w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full">
                   {[
                     { label: "Again", rating: 1, color: "bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20" },
                     { label: "Hard", rating: 2, color: "bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border-orange-500/20" },

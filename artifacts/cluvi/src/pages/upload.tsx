@@ -152,7 +152,7 @@ export default function Upload() {
           {/* Source tabs */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Source material</label>
-            <div className="grid grid-cols-4 gap-2 p-1 rounded-xl bg-card/40 border border-white/5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1 rounded-xl bg-card/40 border border-white/5">
               {TABS.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}

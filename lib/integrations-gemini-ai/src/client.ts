@@ -23,3 +23,9 @@ export const ai = proxyBaseUrl
   : new GoogleGenAI({
       apiKey: directApiKey!,
     });
+
+export function createGeminiClient(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({ apiKey });
+}
+
+export type { GoogleGenAI };
