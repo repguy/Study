@@ -101,7 +101,9 @@ export default function PackDetail() {
             </div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight" data-testid="pack-title">{pack.title}</h1>
             {pack.summary && (
-              <p className="text-muted-foreground mt-2 max-w-2xl leading-relaxed text-sm md:text-base" data-testid="pack-summary">{pack.summary}</p>
+              <div className="mt-3 pl-3 border-l-2 border-primary/40" data-testid="pack-summary">
+                <p className="text-sm md:text-base leading-relaxed text-foreground/70">{pack.summary}</p>
+              </div>
             )}
           </div>
           <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 md:shrink-0">
@@ -150,18 +152,18 @@ export default function PackDetail() {
         </motion.div>
 
         {/* Stats bar */}
-        <motion.div variants={fadeUp} custom={1} initial="hidden" animate="visible" className="grid grid-cols-3 md:grid-cols-4 gap-3">
+        <motion.div variants={fadeUp} custom={1} initial="hidden" animate="visible" className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: "Flashcards", val: pack.flashcardCount, icon: Layers, color: "text-primary" },
-            { label: "Quiz questions", val: pack.quizCount, icon: Target, color: "text-accent" },
-            { label: "Exam predictions", val: pack.examPredictionCount, icon: Brain, color: "text-yellow-400" },
+            { label: "Quiz Qs", val: pack.quizCount, icon: Target, color: "text-accent" },
+            { label: "Predictions", val: pack.examPredictionCount, icon: Brain, color: "text-yellow-400" },
             { label: "Mastery", val: `${pack.studyStrength}%`, icon: Zap, color: "text-green-400" },
           ].map(({ label, val, icon: Icon, color }) => (
-            <div key={label} className="p-4 rounded-xl bg-card/40 border border-white/5 flex items-center gap-3" data-testid={`stat-${label.toLowerCase().replace(/ /g, "-")}`}>
-              <Icon className={`w-5 h-5 ${color} shrink-0`} />
-              <div>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className={`font-bold ${color}`}>{val}</p>
+            <div key={label} className="p-3 md:p-4 rounded-xl bg-card/40 border border-white/5 flex items-center gap-2 md:gap-3 min-w-0 overflow-hidden" data-testid={`stat-${label.toLowerCase().replace(/ /g, "-")}`}>
+              <Icon className={`w-4 h-4 md:w-5 md:h-5 ${color} shrink-0`} />
+              <div className="min-w-0">
+                <p className="text-[11px] text-muted-foreground truncate">{label}</p>
+                <p className={`font-bold text-sm md:text-base ${color}`}>{val}</p>
               </div>
             </div>
           ))}
@@ -197,13 +199,16 @@ export default function PackDetail() {
         {pack.status === "ready" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Key concepts */}
-            <motion.div variants={fadeUp} custom={2} initial="hidden" animate="visible" className="rounded-2xl bg-card/40 border border-white/5 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Brain className="w-5 h-5 text-primary" />
-                <h2 className="font-semibold text-lg">Key concepts</h2>
+            <motion.div variants={fadeUp} custom={2} initial="hidden" animate="visible"
+              className="rounded-2xl bg-card/40 border border-white/8 p-5 md:p-6 overflow-hidden">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Brain className="w-4 h-4 text-primary" />
+                </div>
+                <h2 className="font-semibold text-base md:text-lg">Key concepts</h2>
               </div>
               {keyConcepts.length > 0 ? (
-                <ul className="space-y-3">
+                <ul className="space-y-2.5">
                   {keyConcepts.map((concept, i) => (
                     <motion.li
                       key={i}
@@ -211,11 +216,11 @@ export default function PackDetail() {
                       custom={i * 0.5}
                       initial="hidden"
                       animate="visible"
-                      className="flex items-start gap-3"
+                      className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-white/3 transition-colors"
                       data-testid={`concept-${i}`}
                     >
-                      <CheckCircle2 className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-                      <span className="text-sm text-muted-foreground">{concept}</span>
+                      <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <span className="text-sm text-foreground/80 leading-relaxed">{concept}</span>
                     </motion.li>
                   ))}
                 </ul>
@@ -225,13 +230,16 @@ export default function PackDetail() {
             </motion.div>
 
             {/* Exam predictions */}
-            <motion.div variants={fadeUp} custom={3} initial="hidden" animate="visible" className="rounded-2xl bg-card/40 border border-white/5 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Target className="w-5 h-5 text-yellow-400" />
-                <h2 className="font-semibold text-lg">Exam predictions</h2>
+            <motion.div variants={fadeUp} custom={3} initial="hidden" animate="visible"
+              className="rounded-2xl bg-card/40 border border-white/8 p-5 md:p-6 overflow-hidden">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0">
+                  <Target className="w-4 h-4 text-yellow-400" />
+                </div>
+                <h2 className="font-semibold text-base md:text-lg">Exam predictions</h2>
               </div>
               {examPredictions.length > 0 ? (
-                <ul className="space-y-3">
+                <ul className="space-y-2.5">
                   {examPredictions.map((pred, i) => (
                     <motion.li
                       key={i}
@@ -239,13 +247,13 @@ export default function PackDetail() {
                       custom={i * 0.5}
                       initial="hidden"
                       animate="visible"
-                      className="flex items-start gap-3"
+                      className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-white/3 transition-colors"
                       data-testid={`prediction-${i}`}
                     >
-                      <div className="w-5 h-5 rounded-full bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <div className="w-5 h-5 rounded-full bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center shrink-0 mt-0.5">
                         <span className="text-[10px] font-bold text-yellow-400">{i + 1}</span>
                       </div>
-                      <span className="text-sm text-muted-foreground">{pred}</span>
+                      <span className="text-sm text-foreground/80 leading-relaxed">{pred}</span>
                     </motion.li>
                   ))}
                 </ul>
