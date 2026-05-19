@@ -86,7 +86,7 @@ export default function PackDetail() {
     <AppLayout>
       <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8">
         {/* Header */}
-        <motion.div variants={fadeUp} custom={0} initial="hidden" animate="visible" className="flex items-start justify-between gap-4 flex-wrap">
+        <motion.div variants={fadeUp} custom={0} initial="hidden" animate="visible" className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <Badge
@@ -98,18 +98,18 @@ export default function PackDetail() {
               {pack.isPro && (
                 <Badge className="bg-gradient-to-r from-primary to-accent text-white border-0 text-xs">PRO</Badge>
               )}
-              </div>
-            <h1 className="text-3xl font-bold tracking-tight" data-testid="pack-title">{pack.title}</h1>
+            </div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight" data-testid="pack-title">{pack.title}</h1>
             {pack.summary && (
-              <p className="text-muted-foreground mt-2 max-w-2xl leading-relaxed" data-testid="pack-summary">{pack.summary}</p>
+              <p className="text-muted-foreground mt-2 max-w-2xl leading-relaxed text-sm md:text-base" data-testid="pack-summary">{pack.summary}</p>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 md:shrink-0">
             <Button
               variant="outline"
               size="sm"
               onClick={handleShare}
-              className="border-white/10 hover:bg-white/5"
+              className="border-white/10 hover:bg-white/5 w-full md:w-auto"
               data-testid="button-share"
             >
               <Share2 className="w-4 h-4 mr-1.5" />
@@ -120,27 +120,27 @@ export default function PackDetail() {
               size="sm"
               onClick={handleRegenerate}
               disabled={generateContent.isPending || pack.status === "processing"}
-              className="border-white/10 hover:bg-white/5"
+              className="border-white/10 hover:bg-white/5 w-full md:w-auto"
               data-testid="button-regenerate"
             >
               <RefreshCw className={`w-4 h-4 mr-1.5 ${generateContent.isPending ? "animate-spin" : ""}`} />
               Regenerate
             </Button>
-            <Link href={`/flashcards/${pack.id}`}>
-              <Button variant="outline" className="border-white/10 hover:bg-white/5" data-testid="button-flashcards">
+            <Link href={`/flashcards/${pack.id}`} className="w-full md:w-auto">
+              <Button variant="outline" className="border-white/10 hover:bg-white/5 w-full" data-testid="button-flashcards">
                 <Layers className="w-4 h-4 mr-1.5" />
                 Flashcards
               </Button>
             </Link>
-            <Link href={`/quiz/${pack.id}`}>
-              <Button className="bg-gradient-to-r from-primary to-accent text-white border-0" data-testid="button-quiz">
+            <Link href={`/quiz/${pack.id}`} className="w-full md:w-auto">
+              <Button className="bg-gradient-to-r from-primary to-accent text-white border-0 w-full" data-testid="button-quiz">
                 <Play className="w-4 h-4 mr-1.5" />
                 Take quiz
               </Button>
             </Link>
             {pack.quizCount > 0 && (
-              <Link href={`/exam/${pack.id}`}>
-                <Button variant="outline" className="border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10" data-testid="button-exam">
+              <Link href={`/exam/${pack.id}`} className="col-span-2 md:col-span-1 md:w-auto">
+                <Button variant="outline" className="border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10 w-full" data-testid="button-exam">
                   <GraduationCap className="w-4 h-4 mr-1.5" />
                   Timed exam
                 </Button>
