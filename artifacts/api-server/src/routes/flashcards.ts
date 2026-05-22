@@ -57,8 +57,15 @@ router.patch("/study-packs/:id/flashcards/:cardId/confidence", async (req, res) 
     return;
   }
   const user = await getOrCreateUser(clerkId);
+  const pack = await db.query.studyPacksTable.findFirst({
+    where: and(eq(studyPacksTable.id, params.data.id), eq(studyPacksTable.userId, user.id)),
+  });
+  if (!pack) {
+    res.status(404).json({ error: "Pack not found" });
+    return;
+  }
   const card = await db.query.flashcardsTable.findFirst({
-    where: eq(flashcardsTable.id, params.data.cardId),
+    where: and(eq(flashcardsTable.id, params.data.cardId), eq(flashcardsTable.studyPackId, pack.id)),
   });
   if (!card) {
     res.status(404).json({ error: "Card not found" });

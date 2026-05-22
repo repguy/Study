@@ -86,6 +86,11 @@ router.get("/rooms/:id", async (req, res) => {
     where: and(eq(roomMembershipsTable.roomId, roomId), eq(roomMembershipsTable.userId, user.id)),
   });
 
+  if (!room.isPublic && !membership) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
   const messages = await db.execute(sql`
     SELECT rm.id, rm.content, rm.created_at, u.display_name, u.clerk_id, u.xp, u.level
     FROM room_messages rm
@@ -95,8 +100,10 @@ router.get("/rooms/:id", async (req, res) => {
     LIMIT 100
   `);
 
+  const { joinCode: _omit, ...roomPublic } = room;
+
   res.json({
-    ...room,
+    ...roomPublic,
     isMember: !!membership,
     messages: messages.rows,
   });
