@@ -1,0 +1,9 @@
+node_modules
+.git
+**/.turbo
+**/dist
+artifacts/api-server/dist
+artifacts/cluvi/dist
+artifacts/mockup-sandbox
+.local
+.migration-backup
