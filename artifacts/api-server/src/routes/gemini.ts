@@ -11,7 +11,7 @@ import {
   SendGeminiMessageBody,
   GenerateGeminiImageBody,
 } from "@workspace/api-zod";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, and } from "drizzle-orm";
 import { ai } from "@workspace/integrations-gemini-ai";
 import { generateImage } from "@workspace/integrations-gemini-ai/image";
 
@@ -19,50 +19,36 @@ const router = Router();
 
 router.get("/gemini/conversations", async (req, res) => {
   const { userId: clerkId } = getAuth(req);
-  if (!clerkId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  const convs = await db.select().from(conversations).orderBy(conversations.createdAt);
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const convs = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.clerkId, clerkId))
+    .orderBy(conversations.createdAt);
   res.json(convs);
 });
 
 router.post("/gemini/conversations", async (req, res) => {
   const { userId: clerkId } = getAuth(req);
-  if (!clerkId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const parsed = CreateGeminiConversationBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [conv] = await db
     .insert(conversations)
-    .values({ title: parsed.data.title })
+    .values({ clerkId, title: parsed.data.title })
     .returning();
   res.status(201).json(conv);
 });
 
 router.get("/gemini/conversations/:id", async (req, res) => {
   const { userId: clerkId } = getAuth(req);
-  if (!clerkId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const params = GetGeminiConversationParams.safeParse({ id: Number(req.params.id) });
-  if (!params.success) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const conv = await db.query.conversations.findFirst({
-    where: eq(conversations.id, params.data.id),
+    where: and(eq(conversations.id, params.data.id), eq(conversations.clerkId, clerkId)),
   });
-  if (!conv) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
+  if (!conv) { res.status(404).json({ error: "Not found" }); return; }
   const msgs = await db
     .select()
     .from(messages)
@@ -73,70 +59,47 @@ router.get("/gemini/conversations/:id", async (req, res) => {
 
 router.delete("/gemini/conversations/:id", async (req, res) => {
   const { userId: clerkId } = getAuth(req);
-  if (!clerkId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const params = DeleteGeminiConversationParams.safeParse({ id: Number(req.params.id) });
-  if (!params.success) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const conv = await db.query.conversations.findFirst({
-    where: eq(conversations.id, params.data.id),
+    where: and(eq(conversations.id, params.data.id), eq(conversations.clerkId, clerkId)),
   });
-  if (!conv) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
+  if (!conv) { res.status(404).json({ error: "Not found" }); return; }
   await db.delete(messages).where(eq(messages.conversationId, conv.id));
-  await db.delete(conversations).where(eq(conversations.id, conv.id));
+  await db.delete(conversations).where(and(eq(conversations.id, conv.id), eq(conversations.clerkId, clerkId)));
   res.status(204).send();
 });
 
 router.get("/gemini/conversations/:id/messages", async (req, res) => {
   const { userId: clerkId } = getAuth(req);
-  if (!clerkId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const params = ListGeminiMessagesParams.safeParse({ id: Number(req.params.id) });
-  if (!params.success) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
+  const conv = await db.query.conversations.findFirst({
+    where: and(eq(conversations.id, params.data.id), eq(conversations.clerkId, clerkId)),
+  });
+  if (!conv) { res.status(404).json({ error: "Not found" }); return; }
   const msgs = await db
     .select()
     .from(messages)
-    .where(eq(messages.conversationId, params.data.id))
+    .where(eq(messages.conversationId, conv.id))
     .orderBy(asc(messages.createdAt));
   res.json(msgs);
 });
 
 router.post("/gemini/conversations/:id/messages", async (req, res) => {
   const { userId: clerkId } = getAuth(req);
-  if (!clerkId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const params = SendGeminiMessageParams.safeParse({ id: Number(req.params.id) });
-  if (!params.success) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: "Invalid id" }); return; }
   const body = SendGeminiMessageBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   const conv = await db.query.conversations.findFirst({
-    where: eq(conversations.id, params.data.id),
+    where: and(eq(conversations.id, params.data.id), eq(conversations.clerkId, clerkId)),
   });
-  if (!conv) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
+  if (!conv) { res.status(404).json({ error: "Not found" }); return; }
 
   await db.insert(messages).values({
     conversationId: conv.id,
@@ -185,15 +148,9 @@ router.post("/gemini/conversations/:id/messages", async (req, res) => {
 
 router.post("/gemini/generate-image", async (req, res) => {
   const { userId: clerkId } = getAuth(req);
-  if (!clerkId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!clerkId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const parsed = GenerateGeminiImageBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const result = await generateImage(parsed.data.prompt);
   res.json(result);
 });
