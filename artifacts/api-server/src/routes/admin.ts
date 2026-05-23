@@ -23,6 +23,16 @@ function adminGuard(req: any, res: any): string | null {
   return clerkId;
 }
 
+router.get("/admin/whoami", (req, res) => {
+  const { userId } = getAuth(req);
+  const adminStatus = userId ? isAdmin(userId) : false;
+  res.json({
+    clerkId: userId ?? null,
+    isAdmin: adminStatus,
+    adminIdsConfigured: ADMIN_CLERK_IDS.length > 0,
+  });
+});
+
 router.get("/admin/stats", async (req, res) => {
   if (!adminGuard(req, res)) return;
 
