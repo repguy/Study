@@ -12,6 +12,9 @@ import {
 import router from "./routes";
 import { logger } from "./lib/logger";
 
+const CLERK_PUBLISHABLE_KEY = process.env.CLERK_PUBLISHABLE_KEY;
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
+
 const app: Express = express();
 app.set("trust proxy", 1);
 
@@ -67,12 +70,10 @@ const aiLimiter = rateLimit({
 app.use(globalLimiter);
 
 app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
+  clerkMiddleware({
+    publishableKey: CLERK_PUBLISHABLE_KEY,
+    secretKey: CLERK_SECRET_KEY,
+  }),
 );
 
 app.use("/api/study-packs", aiLimiter);

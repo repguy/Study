@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { useUser } from "@clerk/react";
+import { useUser, useAuth } from "@clerk/react";
 import {
   Users, Crown, BookOpen, Brain, TrendingUp, Activity,
   RefreshCw, Shield, Zap, BarChart3, Search, Plus, Minus,
@@ -99,6 +99,7 @@ function CreditsModal({ user, onClose, onSave }: {
   onClose: () => void;
   onSave: (clerkId: string, newCredits: number) => void;
 }) {
+  const { getToken } = useAuth();
   const [delta, setDelta] = useState("");
   const [mode, setMode] = useState<"add" | "remove" | "set">("add");
   const [loading, setLoading] = useState(false);
@@ -108,10 +109,11 @@ function CreditsModal({ user, onClose, onSave }: {
     if (isNaN(n) || n < 0) return;
     setLoading(true);
     try {
+      const token = await getToken();
       const body = mode === "set" ? { set: n } : { delta: mode === "add" ? n : -n };
       const res = await fetch(`${BASE()}/api/admin/users/${user.clerkId}/credits`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(body),
       });
       if (res.ok) {
@@ -171,6 +173,7 @@ function PackEditModal({ pack, onClose, onSave }: {
   onClose: () => void;
   onSave: () => void;
 }) {
+  const { getToken } = useAuth();
   const [name, setName] = useState(pack?.name ?? "");
   const [credits, setCredits] = useState(String(pack?.credits ?? ""));
   const [priceUsd, setPriceUsd] = useState(String(pack?.priceUsd ?? ""));
@@ -181,13 +184,14 @@ function PackEditModal({ pack, onClose, onSave }: {
   async function save() {
     setLoading(true);
     try {
+      const token = await getToken();
       const body = {
         name, credits: Number(credits), priceUsd: Number(priceUsd),
         discountPercent: Number(discount), badge: badge || null,
       };
       const url = pack ? `${BASE()}/api/admin/credit-packs/${pack.id}` : `${BASE()}/api/admin/credit-packs`;
       const method = pack ? "PATCH" : "POST";
-      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
       if (res.ok) { onSave(); onClose(); }
     } finally {
       setLoading(false);
@@ -244,6 +248,7 @@ const PROVIDERS = [
 ] as const;
 
 function AiConfigTab() {
+  const { getToken } = useAuth();
   const [provider, setProvider] = useState<"gemini" | "openai" | "openrouter" | "anthropic">("gemini");
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
@@ -254,10 +259,17 @@ function AiConfigTab() {
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [saved, setSaved] = useState(false);
 
+  async function authFetch(url: string, options: RequestInit = {}) {
+    const token = await getToken();
+    const headers: Record<string, string> = { ...(options.headers as Record<string, string> ?? {}) };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(url, { ...options, headers });
+  }
+
   async function fetchConfig() {
     setLoadingConfig(true);
     try {
-      const res = await fetch(`${BASE()}/api/admin/ai-config`);
+      const res = await authFetch(`${BASE()}/api/admin/ai-config`);
       if (res.ok) setCurrentConfig(await res.json());
     } finally { setLoadingConfig(false); }
   }
@@ -267,7 +279,7 @@ function AiConfigTab() {
   async function handleSave() {
     setSaving(true);
     try {
-      const res = await fetch(`${BASE()}/api/admin/ai-config`, {
+      const res = await authFetch(`${BASE()}/api/admin/ai-config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider, model: model.trim(), key: key.trim() || undefined }),
@@ -284,7 +296,7 @@ function AiConfigTab() {
   async function handleClear() {
     setClearing(true);
     try {
-      const res = await fetch(`${BASE()}/api/admin/ai-config`, { method: "DELETE" });
+      const res = await authFetch(`${BASE()}/api/admin/ai-config`, { method: "DELETE" });
       if (res.ok) { setCurrentConfig(null); fetchConfig(); }
     } finally { setClearing(false); }
   }
@@ -422,6 +434,7 @@ function AiConfigTab() {
 
 export default function Admin() {
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [tab, setTab] = useState<TabId>("overview");
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [allUsers, setAllUsers] = useState<AdminUser[]>([]);
@@ -440,10 +453,19 @@ export default function Admin() {
     return () => clearTimeout(t);
   }, [search]);
 
-  async function fetchStats() {
+  const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
+    const token = await getToken();
+    const headers: Record<string, string> = {
+      ...(options.headers as Record<string, string> ?? {}),
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(url, { ...options, headers });
+  }, [getToken]);
+
+  const fetchStats = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res = await fetch(`${BASE()}/api/admin/stats`);
+      const res = await authFetch(`${BASE()}/api/admin/stats`);
       if (res.status === 403) {
         setError("Access denied. Your Clerk ID must be in ADMIN_CLERK_IDS environment variable.");
         setLoading(false); setRefreshing(false); return;
@@ -453,29 +475,29 @@ export default function Admin() {
       setError(null);
     } catch { setError("Failed to load stats"); }
     finally { setLoading(false); setRefreshing(false); }
-  }
+  }, [authFetch]);
 
-  async function fetchUsers() {
+  const fetchUsers = useCallback(async () => {
     const url = debouncedSearch
       ? `${BASE()}/api/admin/users?search=${encodeURIComponent(debouncedSearch)}&limit=50`
       : `${BASE()}/api/admin/users?limit=50`;
-    const res = await fetch(url);
+    const res = await authFetch(url);
     if (res.ok) setAllUsers(await res.json() as AdminUser[]);
-  }
+  }, [authFetch, debouncedSearch]);
 
-  async function fetchCreditPacks() {
-    const res = await fetch(`${BASE()}/api/admin/credit-packs`);
+  const fetchCreditPacks = useCallback(async () => {
+    const res = await authFetch(`${BASE()}/api/admin/credit-packs`);
     if (res.ok) setCreditPacks(await res.json() as CreditPack[]);
-  }
+  }, [authFetch]);
 
-  useEffect(() => { fetchStats(); }, []);
-  useEffect(() => { if (tab === "users") fetchUsers(); }, [tab, debouncedSearch]);
-  useEffect(() => { if (tab === "credits") fetchCreditPacks(); }, [tab]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => { if (tab === "users") fetchUsers(); }, [tab, fetchUsers]);
+  useEffect(() => { if (tab === "credits") fetchCreditPacks(); }, [tab, fetchCreditPacks]);
 
   async function togglePro(clerkId: string, current: boolean) {
     setTogglingUser(clerkId);
     try {
-      const res = await fetch(`${BASE()}/api/admin/users/${clerkId}/pro`, {
+      const res = await authFetch(`${BASE()}/api/admin/users/${clerkId}/pro`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isPro: !current }),
       });
@@ -489,7 +511,7 @@ export default function Admin() {
   async function toggleBan(clerkId: string, current: boolean) {
     setTogglingUser(clerkId + "ban");
     try {
-      const res = await fetch(`${BASE()}/api/admin/users/${clerkId}/ban`, {
+      const res = await authFetch(`${BASE()}/api/admin/users/${clerkId}/ban`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isBanned: !current }),
       });
@@ -498,7 +520,7 @@ export default function Admin() {
   }
 
   async function togglePackActive(pack: CreditPack) {
-    const res = await fetch(`${BASE()}/api/admin/credit-packs/${pack.id}`, {
+    const res = await authFetch(`${BASE()}/api/admin/credit-packs/${pack.id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isActive: !pack.isActive }),
     });
@@ -506,7 +528,7 @@ export default function Admin() {
   }
 
   async function deletePack(id: number) {
-    const res = await fetch(`${BASE()}/api/admin/credit-packs/${id}`, { method: "DELETE" });
+    const res = await authFetch(`${BASE()}/api/admin/credit-packs/${id}`, { method: "DELETE" });
     if (res.ok) setCreditPacks((prev) => prev.filter((p) => p.id !== id));
   }
 
