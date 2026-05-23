@@ -4,9 +4,20 @@ import { Button } from "@/components/ui/button";
 import { Zap, Check, CreditCard, ArrowRight, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 const API_BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") + "/api";
+
+declare global {
+  interface Window {
+    createLemonSqueezy?: () => void;
+    LemonSqueezy?: {
+      Setup: (opts: { eventHandler: (event: { event: string }) => void }) => void;
+      Url: { Open: (url: string) => void; Close: () => void };
+    };
+  }
+}
 
 const PACKAGES = [
   { key: "starter", name: "Starter",  credits: 50,  price: "$4.99",  highlight: false, badge: null         },
@@ -26,11 +37,55 @@ const fadeUp = {
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.07, duration: 0.4 } }),
 };
 
+function useLemonSqueezy(onSuccess: () => void) {
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+
+    const existing = document.getElementById("lemon-js");
+    if (!existing) {
+      const script = document.createElement("script");
+      script.id = "lemon-js";
+      script.src = "https://app.lemonsqueezy.com/js/lemon.js";
+      script.defer = true;
+      script.onload = () => init();
+      document.head.appendChild(script);
+    } else {
+      init();
+    }
+
+    function init() {
+      window.createLemonSqueezy?.();
+      window.LemonSqueezy?.Setup({
+        eventHandler: (event) => {
+          if (event.event === "Checkout.Success") {
+            window.LemonSqueezy?.Url.Close();
+            onSuccess();
+          }
+        },
+      });
+      initializedRef.current = true;
+    }
+
+    return () => {};
+  }, [onSuccess]);
+}
+
 export default function Upgrade() {
+  const queryClient = useQueryClient();
   const { data: profile } = useGetUserProfile({ query: { queryKey: getGetUserProfileQueryKey() } });
   const credits = profile?.credits ?? 0;
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [purchased, setPurchased] = useState(false);
+
+  function handleSuccess() {
+    setPurchased(true);
+    queryClient.invalidateQueries({ queryKey: getGetUserProfileQueryKey() });
+  }
+
+  useLemonSqueezy(handleSuccess);
 
   async function handleBuy(pkg: string) {
     setLoading(pkg);
@@ -47,7 +102,7 @@ export default function Upgrade() {
         setError(data.error ?? "Failed to create checkout. Please try again.");
         return;
       }
-      window.open(data.url, "_blank", "noopener,noreferrer");
+      window.LemonSqueezy?.Url.Open(data.url);
     } catch {
       setError("Network error. Please check your connection and try again.");
     } finally {
@@ -68,7 +123,21 @@ export default function Upgrade() {
           </p>
         </motion.div>
 
-        {credits > 0 && (
+        {purchased && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 p-4 rounded-xl bg-accent/10 border border-accent/20"
+          >
+            <Zap className="w-5 h-5 text-accent fill-accent shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-accent">Payment successful!</p>
+              <p className="text-xs text-muted-foreground">Your credits are being added — balance updates in a few seconds.</p>
+            </div>
+          </motion.div>
+        )}
+
+        {credits > 0 && !purchased && (
           <motion.div
             variants={fadeUp}
             custom={1}

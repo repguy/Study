@@ -35,7 +35,7 @@ async function createLSCheckout(opts: {
       type: "checkouts",
       attributes: {
         checkout_options: {
-          embed: false,
+          embed: true,
           media: false,
           button_color: "#7c3aed",
         },
