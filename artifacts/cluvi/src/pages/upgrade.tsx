@@ -80,12 +80,8 @@ export default function Upgrade() {
         )}
 
         <div>
-          <motion.div variants={fadeUp} custom={2} initial="hidden" animate="visible" className="flex items-center justify-between mb-5">
+          <motion.div variants={fadeUp} custom={2} initial="hidden" animate="visible" className="mb-5">
             <h2 className="text-xl font-semibold">Credit packages</h2>
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20">
-              <div className="w-2 h-2 rounded-full bg-yellow-400" />
-              <span className="text-xs font-semibold text-yellow-400">Powered by Lemon Squeezy</span>
-            </div>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -152,11 +148,11 @@ export default function Upgrade() {
             })}
           </div>
 
-          {!lsConfigured && (
+          {!lsConfigured && import.meta.env.DEV && (
             <motion.div variants={fadeUp} custom={6} initial="hidden" animate="visible"
               className="mt-4 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20 text-center">
               <p className="text-xs text-yellow-400">
-                Lemon Squeezy checkout not yet configured — set <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_STARTER_URL</code>, <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_PRO_URL</code>, and <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_POWER_URL</code> in your environment.
+                Dev: Set <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_STARTER_URL</code>, <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_PRO_URL</code>, <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_POWER_URL</code> in Replit Secrets.
               </p>
             </motion.div>
           )}

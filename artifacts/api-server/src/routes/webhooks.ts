@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 import { createHmac } from "crypto";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db";
+import { usersTable, creditTransactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
@@ -37,6 +37,15 @@ async function addCreditsByClerkId(clerkId: string, credits: number): Promise<bo
     .update(usersTable)
     .set({ credits: user.credits + credits, updatedAt: new Date() })
     .where(eq(usersTable.id, user.id));
+  // Log the credit purchase transaction
+  try {
+    await db.insert(creditTransactionsTable).values({
+      userId: user.id,
+      type: "purchase",
+      credits,
+      description: `Credit purchase: ${credits} credits`,
+    });
+  } catch { /* non-fatal */ }
   logger.info({ clerkId, credits, newTotal: user.credits + credits }, "Webhook: credits granted");
   return true;
 }

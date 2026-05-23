@@ -2,26 +2,27 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, lazy, Suspense } from "react";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
 
-import Home from "./pages/home";
-import Dashboard from "./pages/dashboard";
-import Settings from "./pages/settings";
-import Upgrade from "./pages/upgrade";
-import Upload from "./pages/upload";
-import PackDetail from "./pages/pack-detail";
-import Flashcards from "./pages/flashcards";
-import Quiz from "./pages/quiz";
-import ExamPrep from "./pages/exam-prep";
-import Tutor from "./pages/tutor";
-import Admin from "./pages/admin";
-import Rooms from "./pages/rooms";
-import Profile from "./pages/profile";
-import SharedPack from "./pages/shared-pack";
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Home = lazy(() => import("./pages/home"));
+const Dashboard = lazy(() => import("./pages/dashboard"));
+const Settings = lazy(() => import("./pages/settings"));
+const Upgrade = lazy(() => import("./pages/upgrade"));
+const Upload = lazy(() => import("./pages/upload"));
+const PackDetail = lazy(() => import("./pages/pack-detail"));
+const Flashcards = lazy(() => import("./pages/flashcards"));
+const Quiz = lazy(() => import("./pages/quiz"));
+const ExamPrep = lazy(() => import("./pages/exam-prep"));
+const Tutor = lazy(() => import("./pages/tutor"));
+const Admin = lazy(() => import("./pages/admin"));
+const Rooms = lazy(() => import("./pages/rooms"));
+const Profile = lazy(() => import("./pages/profile"));
+const SharedPack = lazy(() => import("./pages/shared-pack"));
+const Payments = lazy(() => import("./pages/payments"));
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,14 @@ function stripBase(path: string): string {
 
 if (!clerkPubKey) {
   throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY in .env file");
+}
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+    </div>
+  );
 }
 
 function ClerkQueryClientCacheInvalidator() {
@@ -72,7 +81,7 @@ function HomeRedirect() {
         <Redirect to="/dashboard" />
       </Show>
       <Show when="signed-out">
-        <Home />
+        <Suspense fallback={<PageLoader />}><Home /></Suspense>
       </Show>
     </>
   );
@@ -82,7 +91,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return (
     <>
       <Show when="signed-in">
-        <Component />
+        <Suspense fallback={<PageLoader />}><Component /></Suspense>
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />
@@ -129,7 +138,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/" component={HomeRedirect} />
             <Route path="/sign-in/*?" component={SignInPage} />
             <Route path="/sign-up/*?" component={SignUpPage} />
-            
+
             <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
             <Route path="/upload"><ProtectedRoute component={Upload} /></Route>
             <Route path="/pack/:id"><ProtectedRoute component={PackDetail} /></Route>
@@ -142,10 +151,15 @@ function ClerkProviderWithRoutes() {
             <Route path="/admin"><ProtectedRoute component={Admin} /></Route>
             <Route path="/rooms"><ProtectedRoute component={Rooms} /></Route>
             <Route path="/profile"><ProtectedRoute component={Profile} /></Route>
+            <Route path="/payments"><ProtectedRoute component={Payments} /></Route>
 
-            <Route path="/shared/:token" component={SharedPack} />
+            <Route path="/shared/:token">
+              <Suspense fallback={<PageLoader />}><SharedPack /></Suspense>
+            </Route>
 
-            <Route component={NotFound} />
+            <Route>
+              <Suspense fallback={<PageLoader />}><NotFound /></Suspense>
+            </Route>
           </Switch>
           <Toaster />
         </TooltipProvider>
