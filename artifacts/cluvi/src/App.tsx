@@ -23,6 +23,7 @@ const Rooms = lazy(() => import("./pages/rooms"));
 const Profile = lazy(() => import("./pages/profile"));
 const SharedPack = lazy(() => import("./pages/shared-pack"));
 const Payments = lazy(() => import("./pages/payments"));
+const PaymentSuccess = lazy(() => import("./pages/payment-success"));
 
 const queryClient = new QueryClient();
 
@@ -142,6 +143,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/tutor"><ProtectedRoute component={Tutor} /></Route>
             <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
             <Route path="/upgrade"><ProtectedRoute component={Upgrade} /></Route>
+            <Route path="/upgrade/success"><ProtectedRoute component={PaymentSuccess} /></Route>
             <Route path="/admin"><ProtectedRoute component={Admin} /></Route>
             <Route path="/rooms"><ProtectedRoute component={Rooms} /></Route>
             <Route path="/profile"><ProtectedRoute component={Profile} /></Route>

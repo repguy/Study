@@ -105,7 +105,7 @@ router.post("/payments/checkout", async (req, res) => {
     const user = await getOrCreateUser(clerkId);
 
     const origin = req.headers.origin as string | undefined;
-    const redirectUrl = origin ? `${origin}/upgrade?success=1` : "https://cluvi.co/upgrade?success=1";
+    const redirectUrl = origin ? `${origin}/upgrade/success` : "https://cluvi.co/upgrade/success";
 
     const checkoutUrl = await createLSCheckout({
       variantId,
