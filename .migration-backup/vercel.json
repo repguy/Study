@@ -1,39 +1,14 @@
 {
-  "version": 2,
-  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/cluvi run build",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @workspace/cluvi build",
   "outputDirectory": "artifacts/cluvi/dist/public",
-  "installCommand": "pnpm install --no-frozen-lockfile",
-  "framework": null,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
   "functions": {
     "api/index.ts": {
-      "memory": 1024,
-      "maxDuration": 60
+      "maxDuration": 30
     }
-  },
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/((?!api).*)",
-      "destination": "/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
-      ]
-    },
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store" }
-      ]
-    }
-  ]
+  }
 }

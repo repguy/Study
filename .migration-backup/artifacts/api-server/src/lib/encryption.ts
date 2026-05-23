@@ -1,7 +1,12 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 
 function getDerivedKey(): Buffer {
-  const secret = process.env.SESSION_SECRET ?? process.env.ENCRYPTION_KEY ?? "cluvi-default-insecure";
+  const secret = process.env.SESSION_SECRET ?? process.env.ENCRYPTION_KEY;
+  if (!secret) {
+    throw new Error(
+      "SESSION_SECRET or ENCRYPTION_KEY environment variable is required for BYOK encryption. Set one before starting the server.",
+    );
+  }
   return scryptSync(secret, "cluvi-byok-salt-v1", 32) as Buffer;
 }
 

@@ -25,24 +25,22 @@ externalPort = 8080
 
 [[ports]]
 localPort = 8081
-externalPort = 80
+externalPort = 8081
 
 [[ports]]
 localPort = 8082
-externalPort = 3001
-
-[[ports]]
-localPort = 8083
-externalPort = 3002
+externalPort = 3000
 
 [[ports]]
 localPort = 21189
-externalPort = 3000
-
-[nix]
-channel = "stable-25_05"
+externalPort = 80
 
 [userenv]
 
 [userenv.shared]
-CLERK_ADMIN_IDS = "user_3Dni4XpO7lkDmedZTAKhihWwNHh"
+VITE_SUPABASE_URL = "https://zrsscgnxcxrkwhqjkzbo.supabase.co"
+VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_W9eUNedp1JjD0i-g_XHYLg_F0rQxApt"
+SUPABASE_URL = "https://zrsscgnxcxrkwhqjkzbo.supabase.co"
+
+[nix]
+channel = "stable-25_05"

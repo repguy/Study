@@ -111,6 +111,12 @@ export const CreateStudyPackBody = zod.object({
   content: zod
     .string()
     .describe("Raw text content, base64-encoded file, or URL"),
+  generate: zod.object({
+    summary: zod.boolean().default(true),
+    flashcards: zod.boolean().default(true),
+    quiz: zod.boolean().default(true),
+    examPredictions: zod.boolean().default(true),
+  }).default({ summary: true, flashcards: true, quiz: true, examPredictions: true }).optional(),
 });
 
 /**

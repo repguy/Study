@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.11"]
+modules = ["nodejs-24"]
 
 [deployment]
 router = "application"
@@ -18,26 +18,3 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 8082
-externalPort = 3000
-
-[[ports]]
-localPort = 21189
-externalPort = 80
-
-[userenv]
-
-[userenv.shared]
-VITE_SUPABASE_URL = "https://zrsscgnxcxrkwhqjkzbo.supabase.co"
-VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_W9eUNedp1JjD0i-g_XHYLg_F0rQxApt"
-SUPABASE_URL = "https://zrsscgnxcxrkwhqjkzbo.supabase.co"

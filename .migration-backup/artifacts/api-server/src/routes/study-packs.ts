@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { studyPacksTable, flashcardsTable, quizQuestionsTable, quizResultsTable, usersTable } from "@workspace/db";
+import { studyPacksTable, flashcardsTable, quizQuestionsTable, quizResultsTable, usersTable, creditTransactionsTable } from "@workspace/db";
 import { CreateStudyPackBody, GetStudyPackParams, DeleteStudyPackParams, GenerateStudyPackContentParams } from "@workspace/api-zod";
 import { eq, desc, and } from "drizzle-orm";
 import { ai, createGeminiClient, type GoogleGenAI } from "@workspace/integrations-gemini-ai";
@@ -22,6 +22,108 @@ const FREE_MODEL = "gemini-2.0-flash";
 const PRO_MODEL = "gemini-2.5-flash";
 
 const CREDIT_COST = { summary: 1, flashcards: 5, quiz: 3, total: 9 };
+
+interface GenerateOptions {
+  summary: boolean;
+  flashcards: boolean;
+  quiz: boolean;
+  examPredictions: boolean;
+}
+
+const DEFAULT_GENERATE: GenerateOptions = { summary: true, flashcards: true, quiz: true, examPredictions: true };
+
+function calcCreditCost(opts: GenerateOptions): number {
+  let cost = 0;
+  if (opts.summary) cost += 2;
+  if (opts.flashcards) cost += 3;
+  if (opts.quiz) cost += 3;
+  if (opts.examPredictions && !opts.summary) cost += 1;
+  return Math.max(2, cost);
+}
+
+function buildSelectivePrompt(title: string, content: string, opts: GenerateOptions): string {
+  const fields: string[] = [];
+  if (opts.summary) {
+    fields.push(`  "summary": "A comprehensive 4-6 sentence summary covering the main ideas, key theories, and core concepts"`);
+    fields.push(`  "keyConcepts": ["key concept 1", "key concept 2", "key concept 3"] // 6-10 essential concepts or terms`);
+  }
+  if (opts.examPredictions) {
+    fields.push(`  "examPredictions": ["likely exam question 1", "likely exam question 2"] // 5-8 high-probability exam questions`);
+  }
+  if (opts.flashcards) {
+    fields.push(`  "flashcards": [{"front": "question or term?", "back": "answer or definition"}] // 10-15 cards covering key points`);
+  }
+  if (opts.quiz) {
+    fields.push(`  "quizQuestions": [{"question": "...", "options": ["A", "B", "C", "D"], "correctAnswer": 0, "explanation": "..."}] // 5-8 questions`);
+  }
+  return `You are an expert study assistant. Analyze the following content and generate structured study material.
+
+Content Title: ${title}
+${content ? `Content: ${content.slice(0, 8000)}` : ""}
+
+Return a JSON object with ONLY these fields:
+{
+${fields.join(",\n")}
+}
+
+Make the content educational, accurate, and focused on key concepts students need to know.
+Return ONLY valid JSON, no markdown or code blocks.`;
+}
+
+function buildSelectiveUrlPrompt(title: string, url: string, opts: GenerateOptions): string {
+  const fields: string[] = [];
+  if (opts.summary) {
+    fields.push(`  "summary": "Comprehensive 4-6 sentence summary of the page's main ideas"`);
+    fields.push(`  "keyConcepts": ["concept 1", "concept 2"] // 6-10 key concepts`);
+  }
+  if (opts.examPredictions) {
+    fields.push(`  "examPredictions": ["likely question 1"] // 5-8 exam questions`);
+  }
+  if (opts.flashcards) {
+    fields.push(`  "flashcards": [{"front": "...", "back": "..."}] // 10-15 cards`);
+  }
+  if (opts.quiz) {
+    fields.push(`  "quizQuestions": [{"question": "...", "options": ["A","B","C","D"], "correctAnswer": 0, "explanation": "..."}] // 5-8 questions`);
+  }
+  return `You are an expert study assistant. Fetch and analyze the page at the URL below, then generate structured study material.
+
+URL: ${url}
+Content Title: ${title}
+
+Return a JSON object with ONLY these fields:
+{
+${fields.join(",\n")}
+}
+
+Return ONLY valid JSON, no markdown or code blocks.`;
+}
+
+function buildSelectiveImagePrompt(title: string, opts: GenerateOptions): string {
+  const fields: string[] = [];
+  if (opts.summary) {
+    fields.push(`  "summary": "Comprehensive 4-6 sentence summary of what the image shows"`);
+    fields.push(`  "keyConcepts": ["concept 1", "concept 2"] // 6-10 key concepts from the image`);
+  }
+  if (opts.examPredictions) {
+    fields.push(`  "examPredictions": ["likely question 1"] // 5-8 exam questions`);
+  }
+  if (opts.flashcards) {
+    fields.push(`  "flashcards": [{"front": "...", "back": "..."}] // 10-15 cards`);
+  }
+  if (opts.quiz) {
+    fields.push(`  "quizQuestions": [{"question": "...", "options": ["A","B","C","D"], "correctAnswer": 0, "explanation": "..."}] // 5-8 questions`);
+  }
+  return `You are an expert study assistant. Analyze this image (diagrams, text, formulas, charts, notes) and generate structured study material.
+
+Content Title: ${title}
+
+Return a JSON object with ONLY these fields:
+{
+${fields.join(",\n")}
+}
+
+Return ONLY valid JSON, no markdown or code blocks.`;
+}
 
 const GENERATION_PROMPT = (title: string, contentOrUrl?: string) => `You are an expert study assistant. Analyze the following content and generate structured study material.
 
@@ -124,21 +226,22 @@ function extractJson(text: string): unknown {
   throw new Error(`Could not parse JSON from model response. Raw: ${cleaned.slice(0, 300)}`);
 }
 
-async function callGeminiText(title: string, content: string, model = PRO_MODEL, client: GoogleGenAI = ai): Promise<{ result: unknown; modelUsed: string }> {
+async function callGeminiText(title: string, content: string, model = PRO_MODEL, client: GoogleGenAI = ai, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
+  const prompt = customPrompt ?? GENERATION_PROMPT(title, content);
   const response = await client.models.generateContent({
     model,
-    contents: [{ role: "user", parts: [{ text: GENERATION_PROMPT(title, content) }] }],
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: { maxOutputTokens: 8192 },
   });
   const text = response.text ?? "";
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function callGeminiUrl(title: string, url: string, model = PRO_MODEL, client: GoogleGenAI = ai): Promise<{ result: unknown; modelUsed: string }> {
-  // Use Gemini urlContext tool so the model fetches and reads the live page
+async function callGeminiUrl(title: string, url: string, model = PRO_MODEL, client: GoogleGenAI = ai, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
+  const prompt = customPrompt ?? URL_GENERATION_PROMPT(title, url);
   const response = await client.models.generateContent({
     model,
-    contents: [{ role: "user", parts: [{ text: URL_GENERATION_PROMPT(title, url) }] }],
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       maxOutputTokens: 8192,
       tools: [{ urlContext: {} }],
@@ -148,14 +251,15 @@ async function callGeminiUrl(title: string, url: string, model = PRO_MODEL, clie
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function callGeminiImage(title: string, base64Data: string, mimeType: string, model = PRO_MODEL, client: GoogleGenAI = ai): Promise<{ result: unknown; modelUsed: string }> {
+async function callGeminiImage(title: string, base64Data: string, mimeType: string, model = PRO_MODEL, client: GoogleGenAI = ai, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
+  const prompt = customPrompt ?? IMAGE_GENERATION_PROMPT(title);
   const response = await client.models.generateContent({
     model,
     contents: [{
       role: "user",
       parts: [
         { inlineData: { mimeType, data: base64Data } },
-        { text: IMAGE_GENERATION_PROMPT(title) },
+        { text: prompt },
       ],
     }],
     config: { maxOutputTokens: 8192 },
@@ -164,14 +268,15 @@ async function callGeminiImage(title: string, base64Data: string, mimeType: stri
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function callOpenRouter(title: string, content: string, model: string): Promise<{ result: unknown; modelUsed: string }> {
+async function callOpenRouter(title: string, content: string, model: string, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
   if (!openrouter) {
     throw new Error("OpenRouter is not configured. Set AI_INTEGRATIONS_OPENROUTER_BASE_URL and AI_INTEGRATIONS_OPENROUTER_API_KEY.");
   }
+  const prompt = customPrompt ?? GENERATION_PROMPT(title, content);
   const completion = await openrouter.chat.completions.create({
     model,
     max_tokens: 8192,
-    messages: [{ role: "user", content: GENERATION_PROMPT(title, content) }],
+    messages: [{ role: "user", content: prompt }],
   });
   const text = completion.choices[0]?.message?.content ?? "";
   return { result: extractJson(text), modelUsed: model };
@@ -183,46 +288,51 @@ async function generateWithModel(
   user: { isPro: boolean; aiModel: string; customAiModel: string | null },
   sourceType: string,
   byokClient?: GoogleGenAI | null,
+  generateOpts?: GenerateOptions,
 ): Promise<{ result: unknown; modelUsed: string }> {
   const resolved = resolveModel(user);
   const geminiClient = byokClient ?? ai;
+  const opts = generateOpts ?? DEFAULT_GENERATE;
+
+  // Build selective prompts
+  const textPrompt = buildSelectivePrompt(title, content, opts);
+  const urlPrompt = buildSelectiveUrlPrompt(title, content, opts);
+  const imagePrompt = buildSelectiveImagePrompt(title, opts);
 
   try {
     if (resolved.type === "openrouter") {
-      return await callOpenRouter(title, content, resolved.model);
+      return await callOpenRouter(title, content, resolved.model, textPrompt);
     }
 
     // Gemini — route by source type
     if (sourceType === "image") {
-      // Detect mime type from base64 header or default to jpeg
       let mimeType = "image/jpeg";
       if (content.startsWith("/9j/")) mimeType = "image/jpeg";
       else if (content.startsWith("iVBOR")) mimeType = "image/png";
       else if (content.startsWith("R0lGO")) mimeType = "image/gif";
       else if (content.startsWith("UklGR")) mimeType = "image/webp";
-      return await callGeminiImage(title, content, mimeType, resolved.model, geminiClient);
+      return await callGeminiImage(title, content, mimeType, resolved.model, geminiClient, imagePrompt);
     }
 
     if (sourceType === "url") {
-      return await callGeminiUrl(title, content, resolved.model, geminiClient);
+      return await callGeminiUrl(title, content, resolved.model, geminiClient, urlPrompt);
     }
 
     // text / pdf / default
-    return await callGeminiText(title, content, resolved.model, geminiClient);
+    return await callGeminiText(title, content, resolved.model, geminiClient, textPrompt);
   } catch (primaryErr) {
     console.error(`[study-packs] primary model (${resolved.model}) failed:`, primaryErr);
     const fallbackModel = resolved.model === PRO_MODEL ? FREE_MODEL : PRO_MODEL;
     console.info(`[study-packs] falling back to ${fallbackModel}...`);
-    // Retry with same source type logic but fallback model
     if (sourceType === "image") {
       let mimeType = "image/jpeg";
       if (content.startsWith("iVBOR")) mimeType = "image/png";
-      return await callGeminiImage(title, content, mimeType, fallbackModel, geminiClient);
+      return await callGeminiImage(title, content, mimeType, fallbackModel, geminiClient, imagePrompt);
     }
     if (sourceType === "url") {
-      return await callGeminiUrl(title, content, fallbackModel, geminiClient);
+      return await callGeminiUrl(title, content, fallbackModel, geminiClient, urlPrompt);
     }
-    return await callGeminiText(title, content, fallbackModel, geminiClient);
+    return await callGeminiText(title, content, fallbackModel, geminiClient, textPrompt);
   }
 }
 
@@ -318,15 +428,17 @@ router.post("/study-packs", async (req, res) => {
   const user = await getOrCreateUser(clerkId);
 
   const byokClient = resolveByokGeminiClient(user);
-  if (!byokClient && user.credits < CREDIT_COST.total) {
-    res.status(402).json({ error: `Not enough credits. Need ${CREDIT_COST.total}, have ${user.credits}.` });
+  const generateOpts: GenerateOptions = parsed.data.generate ?? DEFAULT_GENERATE;
+  const creditCost = byokClient ? 0 : calcCreditCost(generateOpts);
+
+  if (!byokClient && user.credits < creditCost) {
+    res.status(402).json({ error: `Not enough credits. Need ${creditCost}, have ${user.credits}.` });
     return;
   }
   if (!byokClient) {
-    // Deduct credits upfront
     await db
       .update(usersTable)
-      .set({ credits: user.credits - CREDIT_COST.total, updatedAt: new Date() })
+      .set({ credits: user.credits - creditCost, updatedAt: new Date() })
       .where(eq(usersTable.id, user.id));
   }
 
@@ -335,7 +447,7 @@ router.post("/study-packs", async (req, res) => {
     try {
       content = await fetchUrlContent(parsed.data.content);
     } catch {
-      content = parsed.data.content; // fallback to raw if fetch fails
+      content = parsed.data.content;
     }
   }
 
@@ -353,8 +465,20 @@ router.post("/study-packs", async (req, res) => {
 
   res.status(201).json(packWithCounts(pack, 0, 0));
 
+  // Log the credit spend transaction
+  if (!byokClient && creditCost > 0) {
+    try {
+      await db.insert(creditTransactionsTable).values({
+        userId: user.id,
+        type: "spend",
+        credits: -creditCost,
+        description: `Study pack: ${parsed.data.title}`,
+      });
+    } catch { /* non-fatal */ }
+  }
+
   try {
-    const { result: generated, modelUsed } = await generateWithModel(content, parsed.data.title, user, parsed.data.sourceType, byokClient) as {
+    const { result: generated, modelUsed } = await generateWithModel(content, parsed.data.title, user, parsed.data.sourceType, byokClient, generateOpts) as {
       result: {
         flashcards?: { front: string; back: string }[];
         quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
@@ -401,13 +525,21 @@ router.post("/study-packs", async (req, res) => {
       .update(studyPacksTable)
       .set({ status: "error", updatedAt: new Date() })
       .where(eq(studyPacksTable.id, pack.id));
-    if (!byokClient) {
-      // refund credits on error (re-fetch current value to avoid stale state)
+    if (!byokClient && creditCost > 0) {
+      // Refund credits on error
       const freshUser = await db.query.usersTable.findFirst({ where: eq(usersTable.id, user.id) });
       await db
         .update(usersTable)
-        .set({ credits: (freshUser?.credits ?? 0) + CREDIT_COST.total, updatedAt: new Date() })
+        .set({ credits: (freshUser?.credits ?? 0) + creditCost, updatedAt: new Date() })
         .where(eq(usersTable.id, user.id));
+      try {
+        await db.insert(creditTransactionsTable).values({
+          userId: user.id,
+          type: "refund",
+          credits: creditCost,
+          description: `Refund: generation failed for "${parsed.data.title}"`,
+        });
+      } catch { /* non-fatal */ }
     }
   }
 });

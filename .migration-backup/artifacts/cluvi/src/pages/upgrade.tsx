@@ -6,14 +6,14 @@ import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { useUser } from "@clerk/react";
 
-const WHOP_STARTER_URL = import.meta.env.VITE_WHOP_STARTER_URL as string | undefined;
-const WHOP_PRO_URL     = import.meta.env.VITE_WHOP_PRO_URL     as string | undefined;
-const WHOP_POWER_URL   = import.meta.env.VITE_WHOP_POWER_URL   as string | undefined;
+const LS_STARTER_URL = import.meta.env.VITE_LS_STARTER_URL as string | undefined;
+const LS_PRO_URL     = import.meta.env.VITE_LS_PRO_URL     as string | undefined;
+const LS_POWER_URL   = import.meta.env.VITE_LS_POWER_URL   as string | undefined;
 
 const PACKAGES = [
-  { key: "starter", name: "Starter",  credits: 50,  highlight: false, badge: null,         baseUrl: WHOP_STARTER_URL },
-  { key: "pro",     name: "Pro",      credits: 200, highlight: true,  badge: "Best value",  baseUrl: WHOP_PRO_URL     },
-  { key: "power",   name: "Power",    credits: 500, highlight: false, badge: null,         baseUrl: WHOP_POWER_URL   },
+  { key: "starter", name: "Starter",  credits: 50,  highlight: false, badge: null,         baseUrl: LS_STARTER_URL },
+  { key: "pro",     name: "Pro",      credits: 200, highlight: true,  badge: "Best value",  baseUrl: LS_PRO_URL     },
+  { key: "power",   name: "Power",    credits: 500, highlight: false, badge: null,         baseUrl: LS_POWER_URL   },
 ];
 
 const WHAT_CREDITS_BUY = [
@@ -28,10 +28,10 @@ const fadeUp = {
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.07, duration: 0.4 } }),
 };
 
-function buildWhopUrl(base: string, clerkId: string, pkg: string): string {
+function buildLSUrl(base: string, clerkId: string, pkg: string): string {
   const url = new URL(base);
-  url.searchParams.set("metadata[clerk_id]", clerkId);
-  url.searchParams.set("metadata[package]", pkg);
+  url.searchParams.set("checkout[custom][clerk_id]", clerkId);
+  url.searchParams.set("checkout[custom][package]", pkg);
   return url.toString();
 }
 
@@ -41,7 +41,7 @@ export default function Upgrade() {
   const credits = profile?.credits ?? 0;
   const clerkId = user?.id ?? "";
 
-  const whopConfigured = !!(WHOP_STARTER_URL && WHOP_PRO_URL && WHOP_POWER_URL);
+  const lsConfigured = !!(LS_STARTER_URL && LS_PRO_URL && LS_POWER_URL);
 
   return (
     <AppLayout>
@@ -56,7 +56,6 @@ export default function Upgrade() {
           </p>
         </motion.div>
 
-        {/* Current balance bar */}
         {credits > 0 && (
           <motion.div
             variants={fadeUp}
@@ -80,20 +79,15 @@ export default function Upgrade() {
           </motion.div>
         )}
 
-        {/* Packages */}
         <div>
-          <motion.div variants={fadeUp} custom={2} initial="hidden" animate="visible" className="flex items-center justify-between mb-5">
+          <motion.div variants={fadeUp} custom={2} initial="hidden" animate="visible" className="mb-5">
             <h2 className="text-xl font-semibold">Credit packages</h2>
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20">
-              <div className="w-2 h-2 rounded-full bg-purple-400" />
-              <span className="text-xs font-semibold text-purple-400">Powered by Whop</span>
-            </div>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {PACKAGES.map((pkg, i) => {
               const checkoutUrl = pkg.baseUrl && clerkId
-                ? buildWhopUrl(pkg.baseUrl, clerkId, pkg.key)
+                ? buildLSUrl(pkg.baseUrl, clerkId, pkg.key)
                 : pkg.baseUrl ?? null;
 
               return (
@@ -154,17 +148,16 @@ export default function Upgrade() {
             })}
           </div>
 
-          {!whopConfigured && (
+          {!lsConfigured && import.meta.env.DEV && (
             <motion.div variants={fadeUp} custom={6} initial="hidden" animate="visible"
               className="mt-4 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20 text-center">
               <p className="text-xs text-yellow-400">
-                Whop checkout links not yet configured — set <code className="bg-yellow-500/10 px-1 rounded">VITE_WHOP_STARTER_URL</code>, <code className="bg-yellow-500/10 px-1 rounded">VITE_WHOP_PRO_URL</code>, and <code className="bg-yellow-500/10 px-1 rounded">VITE_WHOP_POWER_URL</code> in your environment.
+                Dev: Set <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_STARTER_URL</code>, <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_PRO_URL</code>, <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_POWER_URL</code> in Replit Secrets.
               </p>
             </motion.div>
           )}
         </div>
 
-        {/* What credits buy */}
         <motion.div variants={fadeUp} custom={7} initial="hidden" animate="visible">
           <h2 className="text-xl font-semibold mb-5">What do credits buy?</h2>
           <div className="rounded-2xl bg-card/40 border border-white/5 divide-y divide-white/5">

@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Users,
   User,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -28,6 +29,7 @@ const NAV_LINKS = [
   { href: "/upload", label: "New Pack", icon: PlusCircle },
   { href: "/rooms", label: "Study Rooms", icon: Users },
   { href: "/tutor", label: "AI Tutor", icon: MessageSquare },
+  { href: "/payments", label: "Payments", icon: CreditCard },
 ];
 
 const BOTTOM_LINKS = [
