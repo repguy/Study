@@ -7,7 +7,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { ai, createGeminiClient, type GoogleGenAI } from "@workspace/integrations-gemini-ai";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { getOrCreateUser } from "./user";
-import { decrypt } from "../lib/encryption";
+import { decrypt } from "../lib/encryption"; // still needed for admin site_config key
 import { randomUUID } from "crypto";
 import OpenAI from "openai";
 import { siteConfigTable } from "@workspace/db";
@@ -23,35 +23,8 @@ interface ResolvedAI {
   isByok: boolean;
 }
 
-async function resolveAI(user: {
-  byokGeminiKey?: string | null;
-  byokOpenaiKey?: string | null;
-  byokOpenrouterKey?: string | null;
-}): Promise<ResolvedAI> {
-  // 1. User BYOK — Gemini
-  if (user.byokGeminiKey) {
-    try {
-      const client = createGeminiClient(decrypt(user.byokGeminiKey));
-      return { type: "gemini", model: DEFAULT_GEMINI_MODEL, geminiClient: client, isByok: true };
-    } catch { /* fall through */ }
-  }
-  // 2. User BYOK — OpenAI
-  if (user.byokOpenaiKey) {
-    try {
-      const key = decrypt(user.byokOpenaiKey);
-      const client = new OpenAI({ apiKey: key });
-      return { type: "openai", model: "gpt-4o-mini", openaiClient: client, isByok: true };
-    } catch { /* fall through */ }
-  }
-  // 3. User BYOK — OpenRouter
-  if (user.byokOpenrouterKey) {
-    try {
-      const key = decrypt(user.byokOpenrouterKey);
-      const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1" });
-      return { type: "openrouter", model: "openai/gpt-4o-mini", openaiClient: client, isByok: true };
-    } catch { /* fall through */ }
-  }
-  // 4. Admin-configured default from site_config
+async function resolveAI(_user: object): Promise<ResolvedAI> {
+  // 1. Admin-configured default from site_config
   try {
     const rows = await db.select().from(siteConfigTable).where(
       sqlTag`key IN ('ai_provider', 'ai_model', 'ai_key')`
@@ -459,19 +432,16 @@ router.post("/study-packs", async (req, res) => {
   const user = await getOrCreateUser(clerkId);
 
   const generateOpts: GenerateOptions = parsed.data.generate ?? DEFAULT_GENERATE;
-  const hasByok = !!(user.byokGeminiKey || user.byokOpenaiKey || user.byokOpenrouterKey);
-  const creditCost = hasByok ? 0 : calcCreditCost(generateOpts);
+  const creditCost = calcCreditCost(generateOpts);
 
-  if (!hasByok && user.credits < creditCost) {
+  if (user.credits < creditCost) {
     res.status(402).json({ error: `Not enough credits. Need ${creditCost}, have ${user.credits}.` });
     return;
   }
-  if (!hasByok) {
-    await db
-      .update(usersTable)
-      .set({ credits: user.credits - creditCost, updatedAt: new Date() })
-      .where(eq(usersTable.id, user.id));
-  }
+  await db
+    .update(usersTable)
+    .set({ credits: user.credits - creditCost, updatedAt: new Date() })
+    .where(eq(usersTable.id, user.id));
 
   let content = parsed.data.content;
   if (parsed.data.sourceType === "url") {
@@ -497,7 +467,7 @@ router.post("/study-packs", async (req, res) => {
   res.status(201).json(packWithCounts(pack, 0, 0));
 
   // Log the credit spend transaction
-  if (!hasByok && creditCost > 0) {
+  if (creditCost > 0) {
     try {
       await db.insert(creditTransactionsTable).values({
         userId: user.id,
@@ -556,7 +526,7 @@ router.post("/study-packs", async (req, res) => {
       .update(studyPacksTable)
       .set({ status: "error", updatedAt: new Date() })
       .where(eq(studyPacksTable.id, pack.id));
-    if (!hasByok && creditCost > 0) {
+    if (creditCost > 0) {
       // Refund credits on error
       const freshUser = await db.query.usersTable.findFirst({ where: eq(usersTable.id, user.id) });
       await db
@@ -630,17 +600,14 @@ router.post("/study-packs/:id/generate", async (req, res) => {
   });
   if (!pack) { res.status(404).json({ error: "Not found" }); return; }
 
-  const hasByok2 = !!(user.byokGeminiKey || user.byokOpenaiKey || user.byokOpenrouterKey);
-  if (!hasByok2 && user.credits < CREDIT_COST.total) {
+  if (user.credits < CREDIT_COST.total) {
     res.status(402).json({ error: `Not enough credits. Need ${CREDIT_COST.total}, have ${user.credits}.` });
     return;
   }
-  if (!hasByok2) {
-    await db
-      .update(usersTable)
-      .set({ credits: user.credits - CREDIT_COST.total, updatedAt: new Date() })
-      .where(eq(usersTable.id, user.id));
-  }
+  await db
+    .update(usersTable)
+    .set({ credits: user.credits - CREDIT_COST.total, updatedAt: new Date() })
+    .where(eq(usersTable.id, user.id));
 
   await db
     .update(studyPacksTable)
