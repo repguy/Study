@@ -50,13 +50,17 @@ async function addCreditsByClerkId(clerkId: string, credits: number): Promise<bo
   return true;
 }
 
-function verifyHmac(secret: string, body: string, sig: string, algo = "sha256"): boolean {
+function verifyHmac(secret: string, body: Buffer | string, sig: string, algo = "sha256"): boolean {
   try {
     const hash = createHmac(algo, secret).update(body).digest("hex");
     return `${algo}=${hash}` === sig || hash === sig;
   } catch {
     return false;
   }
+}
+
+function getRawBody(req: Request): Buffer {
+  return Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
 }
 
 router.post("/webhooks/lemonsqueezy", async (req, res) => {
@@ -71,16 +75,18 @@ router.post("/webhooks/lemonsqueezy", async (req, res) => {
     res.status(401).json({ error: "Missing signature" });
     return;
   }
-  const rawBody = JSON.stringify(req.body);
+  const rawBody = getRawBody(req);
   if (!verifyHmac(secret, rawBody, sig)) {
+    logger.warn({ sig, bodyLen: rawBody.length }, "Webhook: HMAC mismatch");
     res.status(401).json({ error: "Invalid signature" });
     return;
   }
 
-  const { meta, data } = req.body as {
+  const payload = JSON.parse(rawBody.toString()) as {
     meta: { event_name: string; custom_data?: Record<string, unknown> };
     data: { attributes: { user_email: string; status: string } };
   };
+  const { meta, data } = payload;
 
   if (meta?.event_name === "order_created" || meta?.event_name === "subscription_payment_success") {
     const clerkId = meta?.custom_data?.clerk_id as string | undefined;
@@ -108,13 +114,13 @@ router.post("/webhooks/polar", async (req, res) => {
     res.status(401).json({ error: "Missing signature" });
     return;
   }
-  const rawBody = JSON.stringify(req.body);
+  const rawBody = getRawBody(req);
   if (!verifyHmac(secret, rawBody, sig)) {
     res.status(401).json({ error: "Invalid signature" });
     return;
   }
 
-  const { type, data } = req.body as {
+  const { type, data } = JSON.parse(rawBody.toString()) as {
     type: string;
     data: { metadata?: Record<string, unknown> };
   };
@@ -145,13 +151,13 @@ router.post("/webhooks/whop", async (req, res) => {
     res.status(401).json({ error: "Missing signature" });
     return;
   }
-  const rawBody = JSON.stringify(req.body);
+  const rawBody = getRawBody(req);
   if (!verifyHmac(secret, rawBody, sig)) {
     res.status(401).json({ error: "Invalid signature" });
     return;
   }
 
-  const { action, data } = req.body as {
+  const { action, data } = JSON.parse(rawBody.toString()) as {
     action: string;
     data: { metadata?: Record<string, unknown> };
   };
