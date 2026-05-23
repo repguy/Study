@@ -13,6 +13,7 @@ export const usersTable = pgTable("users", {
   customAiModel: text("custom_ai_model"),
   byokGeminiKey: text("byok_gemini_key"),
   byokOpenaiKey: text("byok_openai_key"),
+  byokOpenrouterKey: text("byok_openrouter_key"),
   xp: integer("xp").notNull().default(0),
   level: integer("level").notNull().default(1),
   streak: integer("streak").notNull().default(0),

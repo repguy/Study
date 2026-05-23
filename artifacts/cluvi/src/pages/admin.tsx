@@ -5,13 +5,13 @@ import {
   Users, Crown, BookOpen, Brain, TrendingUp, Activity,
   RefreshCw, Shield, Zap, BarChart3, Search, Plus, Minus,
   Ban, CheckCircle, Trash2, Package, Edit3, X, Check,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Bot, Eye, EyeOff, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const BASE = () => (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
-type TabId = "overview" | "users" | "credits";
+type TabId = "overview" | "users" | "credits" | "ai";
 
 interface AdminUser {
   id: number;
@@ -236,6 +236,173 @@ function PackEditModal({ pack, onClose, onSave }: {
   );
 }
 
+const PROVIDERS = [
+  { id: "gemini",     label: "Google Gemini",  hint: "e.g. gemini-2.5-flash" },
+  { id: "openai",     label: "OpenAI",         hint: "e.g. gpt-4o" },
+  { id: "openrouter", label: "OpenRouter",     hint: "e.g. openai/gpt-4o-mini" },
+] as const;
+
+function AiConfigTab() {
+  const [provider, setProvider] = useState<"gemini" | "openai" | "openrouter">("gemini");
+  const [model, setModel] = useState("");
+  const [key, setKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [currentConfig, setCurrentConfig] = useState<{ provider: string | null; model: string | null; hasKey: boolean } | null>(null);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [saved, setSaved] = useState(false);
+
+  async function fetchConfig() {
+    setLoadingConfig(true);
+    try {
+      const res = await fetch(`${BASE()}/api/admin/ai-config`);
+      if (res.ok) setCurrentConfig(await res.json());
+    } finally { setLoadingConfig(false); }
+  }
+
+  useEffect(() => { void fetchConfig(); }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch(`${BASE()}/api/admin/ai-config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, model: model.trim(), key: key.trim() || undefined }),
+      });
+      if (res.ok) {
+        setSaved(true);
+        setKey("");
+        setTimeout(() => setSaved(false), 3000);
+        fetchConfig();
+      }
+    } finally { setSaving(false); }
+  }
+
+  async function handleClear() {
+    setClearing(true);
+    try {
+      const res = await fetch(`${BASE()}/api/admin/ai-config`, { method: "DELETE" });
+      if (res.ok) { setCurrentConfig(null); fetchConfig(); }
+    } finally { setClearing(false); }
+  }
+
+  const hintText = PROVIDERS.find((p) => p.id === provider)?.hint ?? "";
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h2 className="text-lg font-semibold">Default AI Configuration</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Set the default AI provider, model, and API key for all users. Users with their own BYOK key bypass this.
+        </p>
+      </div>
+
+      {/* Current config status */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-3">
+        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide text-xs">Current default</p>
+        {loadingConfig ? (
+          <div className="h-8 animate-pulse bg-white/5 rounded-lg" />
+        ) : currentConfig?.provider ? (
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <Bot className="w-5 h-5 text-primary" />
+              <div>
+                <p className="font-medium capitalize">{currentConfig.provider} — <span className="font-mono text-sm">{currentConfig.model}</span></p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                  {currentConfig.hasKey
+                    ? <><CheckCircle2 className="w-3 h-3 text-green-400" /> API key saved</>
+                    : <><span className="text-yellow-400">⚠</span> No API key set</>}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleClear}
+              disabled={clearing}
+              className="text-xs text-destructive hover:text-destructive/80 border border-destructive/20 hover:bg-destructive/10 px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
+            >
+              {clearing ? "Clearing…" : "Clear config"}
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">No default set — platform Gemini key will be used.</p>
+        )}
+      </div>
+
+      {/* Config form */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
+        <p className="text-sm font-medium">Set new default</p>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-2 block">Provider</label>
+          <div className="flex gap-2 flex-wrap">
+            {PROVIDERS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setProvider(p.id)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  provider === p.id
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white/5 text-muted-foreground border-white/10 hover:bg-white/10 hover:text-foreground"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-2 block">Model slug</label>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={hintText}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-primary/40 transition-all placeholder:text-muted-foreground"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-2 block">
+            API Key <span className="text-muted-foreground">(leave blank to keep existing key)</span>
+          </label>
+          <div className="relative">
+            <input
+              type={showKey ? "text" : "password"}
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="Paste API key…"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 pr-10 text-sm font-mono outline-none focus:border-primary/40 transition-all placeholder:text-muted-foreground"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(!showKey)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1.5">Key is AES-256-GCM encrypted before storage and never returned to the browser.</p>
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={!model.trim() || saving}
+          className={`w-full py-2.5 rounded-xl text-sm font-medium transition-all ${
+            saved
+              ? "bg-green-500/20 text-green-400 border border-green-500/20"
+              : "bg-gradient-to-r from-primary to-accent text-white disabled:opacity-50"
+          }`}
+        >
+          {saving ? "Saving…" : saved ? "✓ Saved!" : "Save AI Configuration"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const { user } = useUser();
   const [tab, setTab] = useState<TabId>("overview");
@@ -355,6 +522,7 @@ export default function Admin() {
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "users", label: "Users", icon: Users },
     { id: "credits", label: "Credit Packs", icon: Package },
+    { id: "ai", label: "AI Config", icon: Bot },
   ];
 
   return (
@@ -519,6 +687,9 @@ export default function Admin() {
             </div>
           </div>
         )}
+
+        {/* AI CONFIG TAB */}
+        {tab === "ai" && <AiConfigTab />}
 
         {/* CREDIT PACKS TAB */}
         {tab === "credits" && (

@@ -3,20 +3,12 @@ import { AppLayout } from "@/components/layout";
 import { useGetUserProfile, useUpdateUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, User, Bot, Zap, Key, Eye, EyeOff, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
+import { Loader2, User, Zap, Key, Eye, EyeOff, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-
-const AI_MODELS = [
-  { value: "auto",       label: "Auto (recommended)",  desc: "Cluvi picks the best model for your pack" },
-  { value: "gemini",     label: "Cluvi Fast AI",       desc: "Fastest reasoning — best for most packs" },
-  { value: "openrouter", label: "Open Source Model",   desc: "Community model, great for general content" },
-  { value: "custom",     label: "Custom model",        desc: "Use any model slug from the AI gateway" },
-];
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
@@ -43,15 +35,30 @@ function Section({ title, subtitle, children, delay }: {
   );
 }
 
+type ByokProvider = "gemini" | "openai" | "openrouter";
+
+const BYOK_PROVIDERS: { id: ByokProvider; label: string; placeholder: string; hint: string }[] = [
+  { id: "gemini",     label: "Google Gemini",  placeholder: "AIza...",  hint: "aistudio.google.com" },
+  { id: "openai",     label: "OpenAI",         placeholder: "sk-...",   hint: "platform.openai.com" },
+  { id: "openrouter", label: "OpenRouter",     placeholder: "sk-or-...", hint: "openrouter.ai/keys" },
+];
+
+interface ByokStatus {
+  hasGeminiKey: boolean;
+  hasOpenaiKey: boolean;
+  hasOpenrouterKey: boolean;
+}
+
 interface ByokKeyRowProps {
-  provider: "gemini" | "openai";
+  provider: ByokProvider;
   label: string;
   placeholder: string;
+  hint: string;
   hasKey: boolean;
   onSaved: () => void;
 }
 
-function ByokKeyRow({ provider, label, placeholder, hasKey, onSaved }: ByokKeyRowProps) {
+function ByokKeyRow({ provider, label, placeholder, hint, hasKey, onSaved }: ByokKeyRowProps) {
   const { toast } = useToast();
   const [key, setKey] = useState("");
   const [show, setShow] = useState(false);
@@ -72,7 +79,7 @@ function ByokKeyRow({ provider, label, placeholder, hasKey, onSaved }: ByokKeyRo
         const err = await res.json() as { error?: string };
         throw new Error(err.error ?? "Failed to save key");
       }
-      toast({ title: "API key saved", description: "Your key is encrypted at rest." });
+      toast({ title: "API key saved", description: "Encrypted and stored securely." });
       setKey("");
       setEditing(false);
       onSaved();
@@ -160,6 +167,7 @@ function ByokKeyRow({ provider, label, placeholder, hasKey, onSaved }: ByokKeyRo
                 </Button>
               )}
             </div>
+            <p className="text-xs text-muted-foreground mt-1.5">Get your key at <span className="text-primary">{hint}</span></p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -173,28 +181,17 @@ export default function Settings() {
   const updateProfile = useUpdateUserProfile();
 
   const [displayName, setDisplayName] = useState("");
-  const [aiModel, setAiModel] = useState("auto");
-  const [customModel, setCustomModel] = useState("");
-  const [savingAi, setSavingAi] = useState(false);
-
-  const [byokStatus, setByokStatus] = useState<{ hasGeminiKey: boolean; hasOpenaiKey: boolean } | null>(null);
+  const [byokStatus, setByokStatus] = useState<ByokStatus | null>(null);
   const [byokLoading, setByokLoading] = useState(true);
 
   useEffect(() => {
-    if (profile) {
-      setDisplayName(profile.displayName ?? "");
-      setAiModel(profile.aiModel ?? "auto");
-      setCustomModel(profile.customAiModel ?? "");
-    }
+    if (profile) setDisplayName(profile.displayName ?? "");
   }, [profile]);
 
   const fetchByokStatus = async () => {
     try {
       const res = await fetch(`${BASE}/api/user/byok`);
-      if (res.ok) {
-        const data = await res.json() as { hasGeminiKey: boolean; hasOpenaiKey: boolean };
-        setByokStatus(data);
-      }
+      if (res.ok) setByokStatus(await res.json() as ByokStatus);
     } catch {
       // silently fail
     } finally {
@@ -211,23 +208,6 @@ export default function Settings() {
     });
   };
 
-  const handleSaveAi = async () => {
-    setSavingAi(true);
-    try {
-      const res = await fetch(`${BASE}/api/user/ai-settings`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aiModel, customAiModel: aiModel === "custom" ? customModel : undefined }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      toast({ title: "AI settings saved" });
-    } catch {
-      toast({ title: "Failed to save AI settings", variant: "destructive" });
-    } finally {
-      setSavingAi(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <AppLayout>
@@ -236,7 +216,7 @@ export default function Settings() {
             <Skeleton className="h-9 w-36" />
             <Skeleton className="h-4 w-72" />
           </div>
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-36 rounded-2xl" />
           ))}
         </div>
@@ -249,7 +229,7 @@ export default function Settings() {
       <div className="p-6 md:p-10 max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-1">Settings</h1>
-          <p className="text-muted-foreground">Profile, AI model preferences, and API keys.</p>
+          <p className="text-muted-foreground">Profile and API keys.</p>
         </div>
 
         <Section title="Credits" delay={0}>
@@ -260,7 +240,7 @@ export default function Settings() {
               </div>
               <div>
                 <p className="font-semibold" data-testid="credits-balance">{profile?.credits ?? 0} credits remaining</p>
-                <p className="text-xs text-muted-foreground">9 credits per pack · Add your API key to skip credits</p>
+                <p className="text-xs text-muted-foreground">Used per study pack — add your API key below to skip credits</p>
               </div>
             </div>
             <a href="/upgrade">
@@ -296,88 +276,46 @@ export default function Settings() {
           </div>
         </Section>
 
-        <Section title="AI model" subtitle="Controls which AI generates your study packs." delay={2}>
-          <div className="flex items-center gap-2 mb-1">
-            <Bot className="w-4 h-4 text-accent shrink-0" />
-            <p className="text-sm text-muted-foreground">Add your own API key below to use it instead of platform credits.</p>
-          </div>
-          <div className="space-y-3">
-            <Select value={aiModel} onValueChange={setAiModel}>
-              <SelectTrigger className="bg-card/40 border-white/8 h-11" data-testid="select-ai-model">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AI_MODELS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{m.label}</span>
-                      <span className="text-xs text-muted-foreground">{m.desc}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {aiModel === "custom" && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-2 overflow-hidden">
-                <label className="text-sm text-muted-foreground">Model slug</label>
-                <Input
-                  value={customModel}
-                  onChange={(e) => setCustomModel(e.target.value)}
-                  placeholder="e.g. anthropic/claude-3.5-sonnet"
-                  className="bg-card/40 border-white/8"
-                  data-testid="input-custom-model"
-                />
-              </motion.div>
-            )}
-
-            <Button onClick={handleSaveAi} disabled={savingAi} className="w-full" data-testid="button-save-ai">
-              {savingAi ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save AI settings"}
-            </Button>
-          </div>
-        </Section>
-
         <Section
           title="API Keys (BYOK)"
-          subtitle="Bring your own key to generate study packs for free — bypasses credit usage entirely."
-          delay={3}
+          subtitle="Use your own API key to generate study packs for free — no credits consumed."
+          delay={2}
         >
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-green-500/5 border border-green-500/15 text-sm mb-1">
             <ShieldCheck className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <p className="font-medium text-green-400">Encrypted at rest</p>
-              <p className="text-muted-foreground text-xs">Keys are AES-256-GCM encrypted before storage and never returned to the client. Saving a Gemini key removes credit deductions.</p>
+              <p className="text-muted-foreground text-xs">Keys are AES-256-GCM encrypted before storage and never sent back to your browser.</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 mb-3 mt-1">
             <Key className="w-4 h-4 text-accent shrink-0" />
-            <p className="text-sm text-muted-foreground">Enter your API key — it is masked and never displayed again.</p>
+            <p className="text-sm text-muted-foreground">Set a key for any provider — it is masked and never displayed again.</p>
           </div>
 
           {byokLoading ? (
             <div className="space-y-4">
-              <Skeleton className="h-9 rounded-xl" />
-              <Skeleton className="h-9 rounded-xl" />
+              {[0, 1, 2].map((i) => <Skeleton key={i} className="h-9 rounded-xl" />)}
             </div>
           ) : (
             <div className="space-y-6 divide-y divide-white/5">
-              <ByokKeyRow
-                provider="gemini"
-                label="Google Gemini API Key"
-                placeholder="AIza..."
-                hasKey={byokStatus?.hasGeminiKey ?? false}
-                onSaved={fetchByokStatus}
-              />
-              <div className="pt-4">
-                <ByokKeyRow
-                  provider="openai"
-                  label="OpenAI API Key"
-                  placeholder="sk-..."
-                  hasKey={byokStatus?.hasOpenaiKey ?? false}
-                  onSaved={fetchByokStatus}
-                />
-              </div>
+              {BYOK_PROVIDERS.map((p, i) => (
+                <div key={p.id} className={i > 0 ? "pt-4" : ""}>
+                  <ByokKeyRow
+                    provider={p.id}
+                    label={p.label}
+                    placeholder={p.placeholder}
+                    hint={p.hint}
+                    hasKey={
+                      p.id === "gemini" ? (byokStatus?.hasGeminiKey ?? false) :
+                      p.id === "openai" ? (byokStatus?.hasOpenaiKey ?? false) :
+                      (byokStatus?.hasOpenrouterKey ?? false)
+                    }
+                    onSaved={fetchByokStatus}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </Section>

@@ -9,17 +9,77 @@ import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { getOrCreateUser } from "./user";
 import { decrypt } from "../lib/encryption";
 import { randomUUID } from "crypto";
+import OpenAI from "openai";
+import { siteConfigTable } from "@workspace/db";
+import { sql as sqlTag } from "drizzle-orm";
 
-function resolveByokGeminiClient(user: { byokGeminiKey?: string | null }): GoogleGenAI | null {
-  if (!user.byokGeminiKey) return null;
-  try { return createGeminiClient(decrypt(user.byokGeminiKey)); }
-  catch { return null; }
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
+interface ResolvedAI {
+  type: "gemini" | "openai" | "openrouter";
+  model: string;
+  geminiClient?: GoogleGenAI;
+  openaiClient?: OpenAI;
+  isByok: boolean;
+}
+
+async function resolveAI(user: {
+  byokGeminiKey?: string | null;
+  byokOpenaiKey?: string | null;
+  byokOpenrouterKey?: string | null;
+}): Promise<ResolvedAI> {
+  // 1. User BYOK — Gemini
+  if (user.byokGeminiKey) {
+    try {
+      const client = createGeminiClient(decrypt(user.byokGeminiKey));
+      return { type: "gemini", model: DEFAULT_GEMINI_MODEL, geminiClient: client, isByok: true };
+    } catch { /* fall through */ }
+  }
+  // 2. User BYOK — OpenAI
+  if (user.byokOpenaiKey) {
+    try {
+      const key = decrypt(user.byokOpenaiKey);
+      const client = new OpenAI({ apiKey: key });
+      return { type: "openai", model: "gpt-4o-mini", openaiClient: client, isByok: true };
+    } catch { /* fall through */ }
+  }
+  // 3. User BYOK — OpenRouter
+  if (user.byokOpenrouterKey) {
+    try {
+      const key = decrypt(user.byokOpenrouterKey);
+      const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1" });
+      return { type: "openrouter", model: "openai/gpt-4o-mini", openaiClient: client, isByok: true };
+    } catch { /* fall through */ }
+  }
+  // 4. Admin-configured default from site_config
+  try {
+    const rows = await db.select().from(siteConfigTable).where(
+      sqlTag`key IN ('ai_provider', 'ai_model', 'ai_key')`
+    );
+    const cfg: Record<string, string | null> = {};
+    for (const r of rows) cfg[r.key] = r.value;
+    if (cfg.ai_provider && cfg.ai_model && cfg.ai_key) {
+      const key = decrypt(cfg.ai_key);
+      const model = cfg.ai_model;
+      if (cfg.ai_provider === "gemini") {
+        const client = createGeminiClient(key);
+        return { type: "gemini", model, geminiClient: client, isByok: false };
+      }
+      if (cfg.ai_provider === "openai") {
+        const client = new OpenAI({ apiKey: key });
+        return { type: "openai", model, openaiClient: client, isByok: false };
+      }
+      if (cfg.ai_provider === "openrouter") {
+        const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1" });
+        return { type: "openrouter", model, openaiClient: client, isByok: false };
+      }
+    }
+  } catch { /* fall through to platform default */ }
+  // 5. Platform default — Gemini
+  return { type: "gemini", model: DEFAULT_GEMINI_MODEL, geminiClient: ai, isByok: false };
 }
 
 const router = Router();
-
-const FREE_MODEL = "gemini-2.0-flash";
-const PRO_MODEL = "gemini-2.5-flash";
 
 const CREDIT_COST = { summary: 1, flashcards: 5, quiz: 3, total: 9 };
 
@@ -202,16 +262,6 @@ Return a JSON object with this exact structure:
 Generate at least 10 flashcards and 5 quiz questions. Make them educational and test key concepts.
 Return ONLY valid JSON, no markdown or code blocks.`;
 
-function resolveModel(user: { isPro: boolean; aiModel: string; customAiModel: string | null }) {
-  const pref = user.aiModel ?? "auto";
-  if (pref === "openrouter" && user.customAiModel) return { type: "openrouter" as const, model: user.customAiModel };
-  if (pref === "custom" && user.customAiModel) return { type: "openrouter" as const, model: user.customAiModel };
-  // auto or gemini: pro users get 2.5-flash, free users get 2.0-flash
-  return user.isPro
-    ? { type: "gemini" as const, model: PRO_MODEL }
-    : { type: "gemini" as const, model: FREE_MODEL };
-}
-
 function extractJson(text: string): unknown {
   // Strip markdown code fences
   let cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -226,7 +276,7 @@ function extractJson(text: string): unknown {
   throw new Error(`Could not parse JSON from model response. Raw: ${cleaned.slice(0, 300)}`);
 }
 
-async function callGeminiText(title: string, content: string, model = PRO_MODEL, client: GoogleGenAI = ai, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
+async function callGeminiText(title: string, content: string, model: string, client: GoogleGenAI, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
   const prompt = customPrompt ?? GENERATION_PROMPT(title, content);
   const response = await client.models.generateContent({
     model,
@@ -237,7 +287,7 @@ async function callGeminiText(title: string, content: string, model = PRO_MODEL,
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function callGeminiUrl(title: string, url: string, model = PRO_MODEL, client: GoogleGenAI = ai, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
+async function callGeminiUrl(title: string, url: string, model: string, client: GoogleGenAI, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
   const prompt = customPrompt ?? URL_GENERATION_PROMPT(title, url);
   const response = await client.models.generateContent({
     model,
@@ -251,7 +301,7 @@ async function callGeminiUrl(title: string, url: string, model = PRO_MODEL, clie
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function callGeminiImage(title: string, base64Data: string, mimeType: string, model = PRO_MODEL, client: GoogleGenAI = ai, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
+async function callGeminiImage(title: string, base64Data: string, mimeType: string, model: string, client: GoogleGenAI, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
   const prompt = customPrompt ?? IMAGE_GENERATION_PROMPT(title);
   const response = await client.models.generateContent({
     model,
@@ -268,12 +318,9 @@ async function callGeminiImage(title: string, base64Data: string, mimeType: stri
   return { result: extractJson(text), modelUsed: model };
 }
 
-async function callOpenRouter(title: string, content: string, model: string, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
-  if (!openrouter) {
-    throw new Error("OpenRouter is not configured. Set AI_INTEGRATIONS_OPENROUTER_BASE_URL and AI_INTEGRATIONS_OPENROUTER_API_KEY.");
-  }
+async function callOpenAICompatible(title: string, content: string, model: string, client: OpenAI, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
   const prompt = customPrompt ?? GENERATION_PROMPT(title, content);
-  const completion = await openrouter.chat.completions.create({
+  const completion = await client.chat.completions.create({
     model,
     max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
@@ -285,55 +332,39 @@ async function callOpenRouter(title: string, content: string, model: string, cus
 async function generateWithModel(
   content: string,
   title: string,
-  user: { isPro: boolean; aiModel: string; customAiModel: string | null },
+  user: {
+    byokGeminiKey?: string | null;
+    byokOpenaiKey?: string | null;
+    byokOpenrouterKey?: string | null;
+  },
   sourceType: string,
-  byokClient?: GoogleGenAI | null,
   generateOpts?: GenerateOptions,
 ): Promise<{ result: unknown; modelUsed: string }> {
-  const resolved = resolveModel(user);
-  const geminiClient = byokClient ?? ai;
+  const resolved = await resolveAI(user);
   const opts = generateOpts ?? DEFAULT_GENERATE;
 
-  // Build selective prompts
   const textPrompt = buildSelectivePrompt(title, content, opts);
   const urlPrompt = buildSelectiveUrlPrompt(title, content, opts);
   const imagePrompt = buildSelectiveImagePrompt(title, opts);
 
-  try {
-    if (resolved.type === "openrouter") {
-      return await callOpenRouter(title, content, resolved.model, textPrompt);
-    }
-
-    // Gemini — route by source type
-    if (sourceType === "image") {
-      let mimeType = "image/jpeg";
-      if (content.startsWith("/9j/")) mimeType = "image/jpeg";
-      else if (content.startsWith("iVBOR")) mimeType = "image/png";
-      else if (content.startsWith("R0lGO")) mimeType = "image/gif";
-      else if (content.startsWith("UklGR")) mimeType = "image/webp";
-      return await callGeminiImage(title, content, mimeType, resolved.model, geminiClient, imagePrompt);
-    }
-
-    if (sourceType === "url") {
-      return await callGeminiUrl(title, content, resolved.model, geminiClient, urlPrompt);
-    }
-
-    // text / pdf / default
-    return await callGeminiText(title, content, resolved.model, geminiClient, textPrompt);
-  } catch (primaryErr) {
-    console.error(`[study-packs] primary model (${resolved.model}) failed:`, primaryErr);
-    const fallbackModel = resolved.model === PRO_MODEL ? FREE_MODEL : PRO_MODEL;
-    console.info(`[study-packs] falling back to ${fallbackModel}...`);
-    if (sourceType === "image") {
-      let mimeType = "image/jpeg";
-      if (content.startsWith("iVBOR")) mimeType = "image/png";
-      return await callGeminiImage(title, content, mimeType, fallbackModel, geminiClient, imagePrompt);
-    }
-    if (sourceType === "url") {
-      return await callGeminiUrl(title, content, fallbackModel, geminiClient, urlPrompt);
-    }
-    return await callGeminiText(title, content, fallbackModel, geminiClient, textPrompt);
+  // OpenAI-compatible (openai or openrouter)
+  if ((resolved.type === "openai" || resolved.type === "openrouter") && resolved.openaiClient) {
+    return await callOpenAICompatible(title, content, resolved.model, resolved.openaiClient, textPrompt);
   }
+
+  // Gemini
+  const geminiClient = resolved.geminiClient ?? ai;
+  if (sourceType === "image") {
+    let mimeType = "image/jpeg";
+    if (content.startsWith("iVBOR")) mimeType = "image/png";
+    else if (content.startsWith("R0lGO")) mimeType = "image/gif";
+    else if (content.startsWith("UklGR")) mimeType = "image/webp";
+    return await callGeminiImage(title, content, mimeType, resolved.model, geminiClient, imagePrompt);
+  }
+  if (sourceType === "url") {
+    return await callGeminiUrl(title, content, resolved.model, geminiClient, urlPrompt);
+  }
+  return await callGeminiText(title, content, resolved.model, geminiClient, textPrompt);
 }
 
 async function fetchUrlContent(url: string): Promise<string> {
@@ -427,15 +458,15 @@ router.post("/study-packs", async (req, res) => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const user = await getOrCreateUser(clerkId);
 
-  const byokClient = resolveByokGeminiClient(user);
   const generateOpts: GenerateOptions = parsed.data.generate ?? DEFAULT_GENERATE;
-  const creditCost = byokClient ? 0 : calcCreditCost(generateOpts);
+  const hasByok = !!(user.byokGeminiKey || user.byokOpenaiKey || user.byokOpenrouterKey);
+  const creditCost = hasByok ? 0 : calcCreditCost(generateOpts);
 
-  if (!byokClient && user.credits < creditCost) {
+  if (!hasByok && user.credits < creditCost) {
     res.status(402).json({ error: `Not enough credits. Need ${creditCost}, have ${user.credits}.` });
     return;
   }
-  if (!byokClient) {
+  if (!hasByok) {
     await db
       .update(usersTable)
       .set({ credits: user.credits - creditCost, updatedAt: new Date() })
@@ -466,7 +497,7 @@ router.post("/study-packs", async (req, res) => {
   res.status(201).json(packWithCounts(pack, 0, 0));
 
   // Log the credit spend transaction
-  if (!byokClient && creditCost > 0) {
+  if (!hasByok && creditCost > 0) {
     try {
       await db.insert(creditTransactionsTable).values({
         userId: user.id,
@@ -478,7 +509,7 @@ router.post("/study-packs", async (req, res) => {
   }
 
   try {
-    const { result: generated, modelUsed } = await generateWithModel(content, parsed.data.title, user, parsed.data.sourceType, byokClient, generateOpts) as {
+    const { result: generated, modelUsed } = await generateWithModel(content, parsed.data.title, user, parsed.data.sourceType, generateOpts) as {
       result: {
         flashcards?: { front: string; back: string }[];
         quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];
@@ -525,7 +556,7 @@ router.post("/study-packs", async (req, res) => {
       .update(studyPacksTable)
       .set({ status: "error", updatedAt: new Date() })
       .where(eq(studyPacksTable.id, pack.id));
-    if (!byokClient && creditCost > 0) {
+    if (!hasByok && creditCost > 0) {
       // Refund credits on error
       const freshUser = await db.query.usersTable.findFirst({ where: eq(usersTable.id, user.id) });
       await db
@@ -599,12 +630,12 @@ router.post("/study-packs/:id/generate", async (req, res) => {
   });
   if (!pack) { res.status(404).json({ error: "Not found" }); return; }
 
-  const byokClient2 = resolveByokGeminiClient(user);
-  if (!byokClient2 && user.credits < CREDIT_COST.total) {
+  const hasByok2 = !!(user.byokGeminiKey || user.byokOpenaiKey || user.byokOpenrouterKey);
+  if (!hasByok2 && user.credits < CREDIT_COST.total) {
     res.status(402).json({ error: `Not enough credits. Need ${CREDIT_COST.total}, have ${user.credits}.` });
     return;
   }
-  if (!byokClient2) {
+  if (!hasByok2) {
     await db
       .update(usersTable)
       .set({ credits: user.credits - CREDIT_COST.total, updatedAt: new Date() })
@@ -617,7 +648,7 @@ router.post("/study-packs/:id/generate", async (req, res) => {
     .where(eq(studyPacksTable.id, pack.id));
 
   try {
-    const { result: generated, modelUsed } = await generateWithModel(pack.sourceContent ?? pack.title, pack.title, user, pack.sourceType ?? "text", byokClient2) as {
+    const { result: generated, modelUsed } = await generateWithModel(pack.sourceContent ?? pack.title, pack.title, user, pack.sourceType ?? "text") as {
       result: {
         flashcards?: { front: string; back: string }[];
         quizQuestions?: { question: string; options: string[]; correctAnswer: number; explanation?: string }[];

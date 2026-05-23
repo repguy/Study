@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
 import { db } from "@workspace/db";
-import { usersTable, studyPacksTable, quizResultsTable, flashcardsTable, creditPacksTable } from "@workspace/db";
+import { usersTable, studyPacksTable, quizResultsTable, flashcardsTable, creditPacksTable, siteConfigTable } from "@workspace/db";
 import { eq, count, sql, desc, ilike, or } from "drizzle-orm";
+import { encrypt } from "../lib/encryption";
 
 const router = Router();
 
@@ -287,6 +288,62 @@ router.delete("/admin/credit-packs/:id", async (req, res) => {
   const id = Number(req.params.id);
   await db.delete(creditPacksTable).where(eq(creditPacksTable.id, id));
   res.status(204).send();
+});
+
+router.get("/admin/ai-config", async (req, res) => {
+  if (!adminGuard(req, res)) return;
+  const rows = await db.select().from(siteConfigTable).where(
+    sql`key IN ('ai_provider', 'ai_model', 'ai_key')`
+  );
+  const config: Record<string, string | null> = { ai_provider: null, ai_model: null, ai_key: null };
+  for (const row of rows) config[row.key] = row.value;
+  res.json({
+    provider: config.ai_provider,
+    model: config.ai_model,
+    hasKey: !!config.ai_key,
+  });
+});
+
+router.post("/admin/ai-config", async (req, res) => {
+  if (!adminGuard(req, res)) return;
+  const { provider, model, key } = req.body as { provider?: string; model?: string; key?: string };
+
+  const VALID_PROVIDERS = ["gemini", "openai", "openrouter"];
+  if (!provider || !VALID_PROVIDERS.includes(provider)) {
+    res.status(400).json({ error: "provider must be gemini, openai, or openrouter" });
+    return;
+  }
+  if (!model || typeof model !== "string" || !model.trim()) {
+    res.status(400).json({ error: "model slug is required" });
+    return;
+  }
+
+  const now = new Date();
+
+  await db.insert(siteConfigTable)
+    .values({ key: "ai_provider", value: provider, updatedAt: now })
+    .onConflictDoUpdate({ target: siteConfigTable.key, set: { value: provider, updatedAt: now } });
+
+  await db.insert(siteConfigTable)
+    .values({ key: "ai_model", value: model.trim(), updatedAt: now })
+    .onConflictDoUpdate({ target: siteConfigTable.key, set: { value: model.trim(), updatedAt: now } });
+
+  if (key && key.trim().length >= 10) {
+    const encrypted = encrypt(key.trim());
+    await db.insert(siteConfigTable)
+      .values({ key: "ai_key", value: encrypted, updatedAt: now })
+      .onConflictDoUpdate({ target: siteConfigTable.key, set: { value: encrypted, updatedAt: now } });
+  }
+
+  res.json({ success: true });
+});
+
+router.delete("/admin/ai-config", async (req, res) => {
+  if (!adminGuard(req, res)) return;
+  await db.delete(siteConfigTable).where(
+    sql`key IN ('ai_provider', 'ai_model', 'ai_key')`
+  );
+  res.json({ success: true });
 });
 
 export default router;

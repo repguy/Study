@@ -8,15 +8,13 @@ import { encrypt, decrypt } from "../lib/encryption";
 
 const router = Router();
 
-const SUPPORTED_PROVIDERS = ["gemini", "openai"] as const;
+const SUPPORTED_PROVIDERS = ["gemini", "openai", "openrouter"] as const;
 type Provider = typeof SUPPORTED_PROVIDERS[number];
 
-function providerKeyField(provider: Provider): "byokGeminiKey" | "byokOpenaiKey" {
-  return provider === "gemini" ? "byokGeminiKey" : "byokOpenaiKey";
-}
-
-function providerDbCol(provider: Provider): "byok_gemini_key" | "byok_openai_key" {
-  return provider === "gemini" ? "byok_gemini_key" : "byok_openai_key";
+function providerKeyField(provider: Provider): "byokGeminiKey" | "byokOpenaiKey" | "byokOpenrouterKey" {
+  if (provider === "gemini") return "byokGeminiKey";
+  if (provider === "openai") return "byokOpenaiKey";
+  return "byokOpenrouterKey";
 }
 
 router.get("/user/byok", async (req, res) => {
@@ -26,6 +24,7 @@ router.get("/user/byok", async (req, res) => {
   res.json({
     hasGeminiKey: !!user.byokGeminiKey,
     hasOpenaiKey: !!user.byokOpenaiKey,
+    hasOpenrouterKey: !!user.byokOpenrouterKey,
   });
 });
 
@@ -36,7 +35,7 @@ router.post("/user/byok", async (req, res) => {
   const { provider, key } = req.body as { provider?: string; key?: string };
 
   if (!provider || !SUPPORTED_PROVIDERS.includes(provider as Provider)) {
-    res.status(400).json({ error: "provider must be 'gemini' or 'openai'" });
+    res.status(400).json({ error: "provider must be 'gemini', 'openai', or 'openrouter'" });
     return;
   }
   if (!key || typeof key !== "string" || key.trim().length < 10) {
@@ -63,7 +62,7 @@ router.delete("/user/byok/:provider", async (req, res) => {
 
   const provider = req.params.provider;
   if (!SUPPORTED_PROVIDERS.includes(provider as Provider)) {
-    res.status(400).json({ error: "provider must be 'gemini' or 'openai'" });
+    res.status(400).json({ error: "provider must be 'gemini', 'openai', or 'openrouter'" });
     return;
   }
 
