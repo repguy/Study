@@ -308,9 +308,9 @@ router.post("/admin/ai-config", async (req, res) => {
   if (!adminGuard(req, res)) return;
   const { provider, model, key } = req.body as { provider?: string; model?: string; key?: string };
 
-  const VALID_PROVIDERS = ["gemini", "openai", "openrouter"];
+  const VALID_PROVIDERS = ["gemini", "openai", "openrouter", "anthropic"];
   if (!provider || !VALID_PROVIDERS.includes(provider)) {
-    res.status(400).json({ error: "provider must be gemini, openai, or openrouter" });
+    res.status(400).json({ error: "provider must be gemini, openai, openrouter, or anthropic" });
     return;
   }
   if (!model || typeof model !== "string" || !model.trim()) {

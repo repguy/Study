@@ -7,19 +7,21 @@ import { eq, desc, and } from "drizzle-orm";
 import { ai, createGeminiClient, type GoogleGenAI } from "@workspace/integrations-gemini-ai";
 import { openrouter } from "@workspace/integrations-openrouter-ai";
 import { getOrCreateUser } from "./user";
-import { decrypt } from "../lib/encryption"; // still needed for admin site_config key
+import { decrypt } from "../lib/encryption";
 import { randomUUID } from "crypto";
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { siteConfigTable } from "@workspace/db";
 import { sql as sqlTag } from "drizzle-orm";
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
 interface ResolvedAI {
-  type: "gemini" | "openai" | "openrouter";
+  type: "gemini" | "openai" | "openrouter" | "anthropic";
   model: string;
   geminiClient?: GoogleGenAI;
   openaiClient?: OpenAI;
+  anthropicClient?: Anthropic;
   isByok: boolean;
 }
 
@@ -46,9 +48,13 @@ async function resolveAI(_user: object): Promise<ResolvedAI> {
         const client = new OpenAI({ apiKey: key, baseURL: "https://openrouter.ai/api/v1" });
         return { type: "openrouter", model, openaiClient: client, isByok: false };
       }
+      if (cfg.ai_provider === "anthropic") {
+        const client = new Anthropic({ apiKey: key });
+        return { type: "anthropic", model, anthropicClient: client, isByok: false };
+      }
     }
   } catch { /* fall through to platform default */ }
-  // 5. Platform default — Gemini
+  // Platform default — Gemini
   return { type: "gemini", model: DEFAULT_GEMINI_MODEL, geminiClient: ai, isByok: false };
 }
 
@@ -302,14 +308,21 @@ async function callOpenAICompatible(title: string, content: string, model: strin
   return { result: extractJson(text), modelUsed: model };
 }
 
+async function callAnthropic(title: string, content: string, model: string, client: Anthropic, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
+  const prompt = customPrompt ?? GENERATION_PROMPT(title, content);
+  const message = await client.messages.create({
+    model,
+    max_tokens: 8192,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+  return { result: extractJson(text), modelUsed: model };
+}
+
 async function generateWithModel(
   content: string,
   title: string,
-  user: {
-    byokGeminiKey?: string | null;
-    byokOpenaiKey?: string | null;
-    byokOpenrouterKey?: string | null;
-  },
+  user: object,
   sourceType: string,
   generateOpts?: GenerateOptions,
 ): Promise<{ result: unknown; modelUsed: string }> {
@@ -319,6 +332,11 @@ async function generateWithModel(
   const textPrompt = buildSelectivePrompt(title, content, opts);
   const urlPrompt = buildSelectiveUrlPrompt(title, content, opts);
   const imagePrompt = buildSelectiveImagePrompt(title, opts);
+
+  // Anthropic
+  if (resolved.type === "anthropic" && resolved.anthropicClient) {
+    return await callAnthropic(title, content, resolved.model, resolved.anthropicClient, textPrompt);
+  }
 
   // OpenAI-compatible (openai or openrouter)
   if ((resolved.type === "openai" || resolved.type === "openrouter") && resolved.openaiClient) {

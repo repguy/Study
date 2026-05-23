@@ -4,25 +4,34 @@ const proxyBaseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
 const proxyApiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
 const directApiKey = process.env.GEMINI_API_KEY;
 
-if (!proxyBaseUrl && !directApiKey) {
-  throw new Error(
-    "Gemini AI is not configured. Set either:\n" +
-    "  - AI_INTEGRATIONS_GEMINI_BASE_URL + AI_INTEGRATIONS_GEMINI_API_KEY (Replit AI integration)\n" +
-    "  - GEMINI_API_KEY (your own Google Gemini API key)",
-  );
+function makeImageClient(): GoogleGenAI | null {
+  if (proxyBaseUrl) {
+    return new GoogleGenAI({
+      apiKey: proxyApiKey ?? "replit-managed",
+      httpOptions: { apiVersion: "", baseUrl: proxyBaseUrl },
+    });
+  }
+  if (directApiKey) {
+    return new GoogleGenAI({ apiKey: directApiKey });
+  }
+  return null;
 }
 
-const imageAi = proxyBaseUrl
-  ? new GoogleGenAI({
-      apiKey: proxyApiKey ?? "replit-managed",
-      httpOptions: {
-        apiVersion: "",
-        baseUrl: proxyBaseUrl,
-      },
-    })
-  : new GoogleGenAI({
-      apiKey: directApiKey!,
-    });
+const _imageAi = makeImageClient();
+
+const imageAi: GoogleGenAI = new Proxy({} as GoogleGenAI, {
+  get(_target, prop) {
+    if (!_imageAi) {
+      throw new Error(
+        "Gemini AI is not configured. Set either:\n" +
+        "  - AI_INTEGRATIONS_GEMINI_BASE_URL + AI_INTEGRATIONS_GEMINI_API_KEY (Replit AI integration)\n" +
+        "  - GEMINI_API_KEY (your own Google Gemini API key)",
+      );
+    }
+    const value = (_imageAi as any)[prop];
+    return typeof value === "function" ? value.bind(_imageAi) : value;
+  },
+});
 
 export { imageAi as ai };
 

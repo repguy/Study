@@ -237,13 +237,14 @@ function PackEditModal({ pack, onClose, onSave }: {
 }
 
 const PROVIDERS = [
-  { id: "gemini",     label: "Google Gemini",  hint: "e.g. gemini-2.5-flash" },
-  { id: "openai",     label: "OpenAI",         hint: "e.g. gpt-4o" },
-  { id: "openrouter", label: "OpenRouter",     hint: "e.g. openai/gpt-4o-mini" },
+  { id: "gemini",     label: "Google Gemini",  hint: "e.g. gemini-2.5-flash",      models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"] },
+  { id: "openai",     label: "OpenAI",         hint: "e.g. gpt-4o",                models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"] },
+  { id: "openrouter", label: "OpenRouter",     hint: "e.g. openai/gpt-4o-mini",    models: ["openai/gpt-4o-mini", "openai/gpt-4o", "anthropic/claude-3-5-sonnet", "google/gemini-2.5-flash"] },
+  { id: "anthropic",  label: "Anthropic",      hint: "e.g. claude-3-5-sonnet-20241022", models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"] },
 ] as const;
 
 function AiConfigTab() {
-  const [provider, setProvider] = useState<"gemini" | "openai" | "openrouter">("gemini");
+  const [provider, setProvider] = useState<"gemini" | "openai" | "openrouter" | "anthropic">("gemini");
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -362,6 +363,22 @@ function AiConfigTab() {
             placeholder={hintText}
             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-primary/40 transition-all placeholder:text-muted-foreground"
           />
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {PROVIDERS.find((p) => p.id === provider)?.models.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setModel(m)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-all border ${
+                  model === m
+                    ? "bg-primary/20 text-primary border-primary/30"
+                    : "bg-white/5 text-muted-foreground border-white/8 hover:bg-white/10 hover:text-foreground"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div>
