@@ -26,10 +26,15 @@ function adminGuard(req: any, res: any): string | null {
 router.get("/admin/whoami", (req, res) => {
   const { userId } = getAuth(req);
   const adminStatus = userId ? isAdmin(userId) : false;
+  // Temporary debug — logs to server console
+  console.log("[WHOAMI] clerkId from request:", userId);
+  console.log("[WHOAMI] ADMIN_CLERK_IDS:", ADMIN_CLERK_IDS);
+  console.log("[WHOAMI] isAdmin:", adminStatus);
   res.json({
     clerkId: userId ?? null,
     isAdmin: adminStatus,
     adminIdsConfigured: ADMIN_CLERK_IDS.length > 0,
+    adminIds: ADMIN_CLERK_IDS,
   });
 });
 
