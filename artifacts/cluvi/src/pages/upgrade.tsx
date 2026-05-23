@@ -1,19 +1,17 @@
 import { AppLayout } from "@/components/layout";
 import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Zap, Check, CreditCard, ArrowRight, ExternalLink } from "lucide-react";
+import { Zap, Check, CreditCard, ArrowRight, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { useUser } from "@clerk/react";
+import { useState } from "react";
 
-const LS_STARTER_URL = import.meta.env.VITE_LS_STARTER_URL as string | undefined;
-const LS_PRO_URL     = import.meta.env.VITE_LS_PRO_URL     as string | undefined;
-const LS_POWER_URL   = import.meta.env.VITE_LS_POWER_URL   as string | undefined;
+const API_BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") + "/api";
 
 const PACKAGES = [
-  { key: "starter", name: "Starter",  credits: 50,  highlight: false, badge: null,         baseUrl: LS_STARTER_URL },
-  { key: "pro",     name: "Pro",      credits: 200, highlight: true,  badge: "Best value",  baseUrl: LS_PRO_URL     },
-  { key: "power",   name: "Power",    credits: 500, highlight: false, badge: null,         baseUrl: LS_POWER_URL   },
+  { key: "starter", name: "Starter",  credits: 50,  price: "$4.99",  highlight: false, badge: null         },
+  { key: "pro",     name: "Pro",      credits: 200, price: "$14.99", highlight: true,  badge: "Best value"  },
+  { key: "power",   name: "Power",    credits: 500, price: "$29.99", highlight: false, badge: null          },
 ];
 
 const WHAT_CREDITS_BUY = [
@@ -28,20 +26,34 @@ const fadeUp = {
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.07, duration: 0.4 } }),
 };
 
-function buildLSUrl(base: string, clerkId: string, pkg: string): string {
-  const url = new URL(base);
-  url.searchParams.set("checkout[custom][clerk_id]", clerkId);
-  url.searchParams.set("checkout[custom][package]", pkg);
-  return url.toString();
-}
-
 export default function Upgrade() {
   const { data: profile } = useGetUserProfile({ query: { queryKey: getGetUserProfileQueryKey() } });
-  const { user } = useUser();
   const credits = profile?.credits ?? 0;
-  const clerkId = user?.id ?? "";
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const lsConfigured = !!(LS_STARTER_URL && LS_PRO_URL && LS_POWER_URL);
+  async function handleBuy(pkg: string) {
+    setLoading(pkg);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/payments/checkout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pkg }),
+      });
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        setError(data.error ?? "Failed to create checkout. Please try again.");
+        return;
+      }
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(null);
+    }
+  }
 
   return (
     <AppLayout>
@@ -79,83 +91,66 @@ export default function Upgrade() {
           </motion.div>
         )}
 
+        {error && (
+          <motion.div variants={fadeUp} custom={1.5} initial="hidden" animate="visible"
+            className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+            <p className="text-sm text-red-400">{error}</p>
+          </motion.div>
+        )}
+
         <div>
           <motion.div variants={fadeUp} custom={2} initial="hidden" animate="visible" className="mb-5">
             <h2 className="text-xl font-semibold">Credit packages</h2>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {PACKAGES.map((pkg, i) => {
-              const checkoutUrl = pkg.baseUrl && clerkId
-                ? buildLSUrl(pkg.baseUrl, clerkId, pkg.key)
-                : pkg.baseUrl ?? null;
-
-              return (
-                <motion.div
-                  key={pkg.name}
-                  variants={fadeUp}
-                  custom={i + 3}
-                  initial="hidden"
-                  animate="visible"
-                  className={`relative rounded-2xl border p-6 flex flex-col gap-4 transition-all ${
-                    pkg.highlight
-                      ? "border-primary/40 bg-gradient-to-b from-primary/10 to-card/40 shadow-lg shadow-primary/10"
-                      : "border-white/5 bg-card/40 hover:border-white/10"
-                  }`}
-                  data-testid={`package-${pkg.name.toLowerCase()}`}
-                >
-                  {pkg.badge && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-primary text-white shadow">
-                        {pkg.badge}
-                      </span>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">{pkg.name}</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-5xl font-bold tracking-tight">{pkg.credits}</span>
-                      <span className="text-muted-foreground text-sm">credits</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">{Math.floor(pkg.credits / 9)} study packs</p>
+            {PACKAGES.map((pkg, i) => (
+              <motion.div
+                key={pkg.name}
+                variants={fadeUp}
+                custom={i + 3}
+                initial="hidden"
+                animate="visible"
+                className={`relative rounded-2xl border p-6 flex flex-col gap-4 transition-all ${
+                  pkg.highlight
+                    ? "border-primary/40 bg-gradient-to-b from-primary/10 to-card/40 shadow-lg shadow-primary/10"
+                    : "border-white/5 bg-card/40 hover:border-white/10"
+                }`}
+                data-testid={`package-${pkg.name.toLowerCase()}`}
+              >
+                {pkg.badge && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-primary text-white shadow">
+                      {pkg.badge}
+                    </span>
                   </div>
-                  <div className="flex-1" />
-                  {checkoutUrl ? (
-                    <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="w-full">
-                      <Button
-                        className={`w-full ${pkg.highlight ? "bg-gradient-to-r from-primary to-accent text-white border-0" : ""}`}
-                        variant={pkg.highlight ? "default" : "outline"}
-                        data-testid={`buy-${pkg.name.toLowerCase()}`}
-                      >
-                        <CreditCard className="w-4 h-4 mr-2" />
-                        Buy {pkg.name}
-                        <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
-                      </Button>
-                    </a>
+                )}
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">{pkg.name}</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-5xl font-bold tracking-tight">{pkg.credits}</span>
+                    <span className="text-muted-foreground text-sm">credits</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{pkg.price} · {Math.floor(pkg.credits / 9)} study packs</p>
+                </div>
+                <div className="flex-1" />
+                <Button
+                  className={`w-full ${pkg.highlight ? "bg-gradient-to-r from-primary to-accent text-white border-0" : ""}`}
+                  variant={pkg.highlight ? "default" : "outline"}
+                  disabled={loading !== null}
+                  onClick={() => handleBuy(pkg.key)}
+                  data-testid={`buy-${pkg.name.toLowerCase()}`}
+                >
+                  {loading === pkg.key ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   ) : (
-                    <Button
-                      className={`w-full ${pkg.highlight ? "bg-gradient-to-r from-primary to-accent text-white border-0" : ""}`}
-                      variant={pkg.highlight ? "default" : "outline"}
-                      disabled
-                      data-testid={`buy-${pkg.name.toLowerCase()}`}
-                    >
-                      <CreditCard className="w-4 h-4 mr-2" />
-                      Coming soon
-                    </Button>
+                    <CreditCard className="w-4 h-4 mr-2" />
                   )}
-                </motion.div>
-              );
-            })}
+                  {loading === pkg.key ? "Opening checkout…" : `Buy ${pkg.name}`}
+                </Button>
+              </motion.div>
+            ))}
           </div>
-
-          {!lsConfigured && import.meta.env.DEV && (
-            <motion.div variants={fadeUp} custom={6} initial="hidden" animate="visible"
-              className="mt-4 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20 text-center">
-              <p className="text-xs text-yellow-400">
-                Dev: Set <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_STARTER_URL</code>, <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_PRO_URL</code>, <code className="bg-yellow-500/10 px-1 rounded">VITE_LS_POWER_URL</code> in Replit Secrets.
-              </p>
-            </motion.div>
-          )}
         </div>
 
         <motion.div variants={fadeUp} custom={7} initial="hidden" animate="visible">
