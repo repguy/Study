@@ -1,5 +1,16 @@
 {
   "version": 2,
   "buildCommand": "pnpm install --no-frozen-lockfile && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/cluvi run build",
-  "outputDirectory": "artifacts/cluvi/dist"
+  "outputDirectory": "artifacts/cluvi/dist",
+  "functions": {
+    "artifacts/cluvi/server.js": {
+      "runtime": "nodejs20.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/.*",
+      "dest": "artifacts/cluvi/server.js"
+    }
+  ]
 }
