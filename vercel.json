@@ -1,7 +1,7 @@
 {
   "version": 2,
   "buildCommand": "pnpm install --no-frozen-lockfile && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/cluvi run build",
-  "outputDirectory": "artifacts/cluvi/dist/public",
+  "outputDirectory": "artifacts/cluvi/dist",
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" }
   ],
