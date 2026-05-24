@@ -297,7 +297,7 @@ export default function PackDetail() {
             <div className="text-center">
               <p className="font-semibold">Generation failed</p>
               <p className="text-sm text-muted-foreground mt-1">
-                The AI couldn't process your content. Your credits have been refunded.
+                {pack.errorMessage ?? "The AI couldn't process your content. Your credits have been refunded."}
               </p>
             </div>
             <Button onClick={handleRegenerate} disabled={generateContent.isPending}

@@ -16,6 +16,7 @@ export const studyPacksTable = pgTable("study_packs", {
   isPro: boolean("is_pro").notNull().default(false),
   shareToken: text("share_token").unique(),
   aiModelUsed: text("ai_model_used"),
+  errorMessage: text("error_message"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

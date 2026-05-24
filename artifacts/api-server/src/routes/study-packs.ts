@@ -299,11 +299,17 @@ async function callGeminiImage(title: string, base64Data: string, mimeType: stri
 
 async function callOpenAICompatible(title: string, content: string, model: string, client: OpenAI, customPrompt?: string): Promise<{ result: unknown; modelUsed: string }> {
   const prompt = customPrompt ?? GENERATION_PROMPT(title, content);
-  const completion = await client.chat.completions.create({
-    model,
-    max_tokens: 8192,
-    messages: [{ role: "user", content: prompt }],
-  });
+  let completion;
+  try {
+    completion = await client.chat.completions.create({
+      model,
+      max_tokens: 8192,
+      messages: [{ role: "user", content: prompt }],
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`OpenRouter/OpenAI API error: ${msg}`);
+  }
   const text = completion.choices[0]?.message?.content ?? "";
   return { result: extractJson(text), modelUsed: model };
 }
@@ -539,10 +545,11 @@ router.post("/study-packs", async (req, res) => {
       })
       .where(eq(studyPacksTable.id, pack.id));
   } catch (err) {
-    console.error("[study-packs] generation failed for pack", pack.id, err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[study-packs] generation failed for pack", pack.id, errMsg);
     await db
       .update(studyPacksTable)
-      .set({ status: "error", updatedAt: new Date() })
+      .set({ status: "error", errorMessage: errMsg, updatedAt: new Date() })
       .where(eq(studyPacksTable.id, pack.id));
     if (creditCost > 0) {
       // Refund credits on error
